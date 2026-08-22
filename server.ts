@@ -4963,7 +4963,15 @@ function activeWorkforce(companyId: string) {
     default_tools: [...employee.default_tools],
     collaborates_with: [...employee.collaborates_with],
     avatar_url: `/static/assets/employee-avatars/${employee.id}.webp`,
-    capability_summary: employee.id === 'sarah'
+    capability_summary: employee.id === 'data_analyst'
+      ? 'Turns approved business data into evidence-first KPI, variance, forecasting, and decision-support briefs with assumptions and limits.'
+      : employee.id === 'cybersecurity_analyst'
+        ? 'Turns verified security evidence into least-privilege access, vulnerability, incident, compliance, and remediation briefs with explicit approval gates.'
+        : employee.id === 'backend_developer'
+          ? 'Turns technical requests into safe API, backend, migration, debugging, release, and repository implementation plans with rollback and verification.'
+          : employee.id === 'qa_engineer'
+            ? 'Turns requirements into deterministic test strategy, automation, defect evidence, regression coverage, and release-readiness recommendations.'
+      : employee.id === 'sarah'
       ? 'Owns intake, delegation, progress updates, approvals, and the final client handoff.'
       : employee.id === 'alex'
         ? 'Turns requests into owned workflows, deadlines, dependencies, service levels, handoffs, and verified operational outcomes.'
@@ -6242,8 +6250,6 @@ const handleCreateOrder = async (req: express.Request, res: express.Response) =>
   if (req.body?.approval_context !== 'owner_checkout') {
     return res.status(403).json({ error: 'Live Razorpay checkout requires an explicit owner confirmation. Agents may only prepare a recommendation or payment request.' });
   }
-  if (!razorpayClient || !RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) return res.status(503).json({ error: 'Payments are not configured on this server.' });
-
   const { tier, amount, currency, receipt } = req.body || {};
   let amountInPaise: number;
   const targetTier = tier || user.selected_tier || 'growth';
@@ -6260,6 +6266,8 @@ const handleCreateOrder = async (req: express.Request, res: express.Response) =>
     }
     amountInPaise = Math.round((plan.price_inr || plan.price * 83) * 100);
   }
+
+  if (!razorpayClient || !RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) return res.status(503).json({ error: 'Payments are not configured on this server.' });
 
   try {
     const order = await razorpayClient.orders.create({

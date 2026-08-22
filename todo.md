@@ -19,3 +19,7 @@
 - [x] Add and run tests for employee isolation, provider-failure handling, planning approvals, and Razorpay payment approval enforcement.
 - [x] Commit the completed implementation to the repository.
 - [ ] Manually review the authenticated owner experience at desktop and mobile breakpoints with a real workspace login.
+- [x] Reconcile legacy test fixtures and assertions with the current four-avatar workforce roster and role contracts.
+- [x] Repair legacy billing, checkout, onboarding, and capacity test coverage so it reflects the current application contract.
+- [x] Run the complete automated suite and document the tenant-scoped employee workspace isolation results.
+- [ ] Commit the legacy-suite fixes and prepare the repository for owner-initiated production publishing.
