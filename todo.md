@@ -48,4 +48,7 @@
 - [x] Replace the overly broad Firestore client rules with verified company-scoped rules for tenant data, jobs, workflows, and payment records.
 - [x] Prepare a no-new-billing public Caveworkers release candidate through the existing managed publishing path, with Hermes and unconfigured external services kept disabled.
 - [ ] Owner-publish the validated no-new-billing candidate through the existing managed publishing interface and verify its live health and four-workspace presentation.
+- [ ] Verify the newly published no-new-billing release health and four-employee presentation without creating a task, payment, connector action, or external side effect.
+- [x] Replace stale public landing-page references to Sarah, David, Alex, and a three-person legacy crew with the approved four employee roles and safety boundary.
+- [x] Add a regression test that prevents legacy employees, unsupported connector claims, and fabricated live-performance metrics from returning to the public landing page.
 - [x] Document the deferred Cloud Run, Secret Manager, billing, and private Hermes requirements for the later full-runtime rollout.
