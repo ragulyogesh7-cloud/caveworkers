@@ -32,7 +32,7 @@
 - [x] Implement short-lived, narrowly scoped Caveworkers capability tokens because Hermes remote MCP calls do not propagate trusted per-run tenant metadata.
 - [x] Connect agent execution to isolated employee workspaces, task streaming, approval checkpoints, and live Razorpay prohibition.
 - [ ] Validate all four Hermes-backed employee flows for tool boundaries, tenant isolation, cancellation, failure handling, and approval enforcement.
-- [ ] Commit and push the Hermes integration with owner-initiated production rollout guidance.
+- [x] Commit and push the Hermes integration with owner-initiated production rollout guidance.
 - [x] Define and document private same-project Hermes service ingress, service-to-service authentication, managed secret injection, and feature-flag rollout.
 - [x] Add a separately deployable internal Cloud Run capability-bridge container, Cloud Build contract, and operator deployment script.
 - [x] Fail closed on the Hermes API-server profile by binding the generated private profile, using the documented API-server MCP-only allow-list, and disabling native execution toolsets.
