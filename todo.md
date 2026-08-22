@@ -22,4 +22,4 @@
 - [x] Reconcile legacy test fixtures and assertions with the current four-avatar workforce roster and role contracts.
 - [x] Repair legacy billing, checkout, onboarding, and capacity test coverage so it reflects the current application contract.
 - [x] Run the complete automated suite and document the tenant-scoped employee workspace isolation results.
-- [ ] Commit the legacy-suite fixes and prepare the repository for owner-initiated production publishing.
+- [x] Commit the legacy-suite fixes and prepare the repository for owner-initiated production publishing.
