@@ -41,3 +41,11 @@
 - [x] Persist one tenant-bound, audit-ready draft artifact through the capability bridge as the initial non-destructive real Hermes tool effect.
 - [x] Add direct HTTP regression coverage for private bridge listener startup and static-bearer enforcement.
 - [x] Map Hermes waiting-for-approval states to durable Caveworkers approval records and resume or stop the exact private run only after a workspace decision.
+- [ ] Complete a company-ready production-readiness review for the Caveworkers web application, four employee workflows, private Hermes services, security controls, and owner deployment path.
+- [ ] Validate and document the staged release gate for a real Data Analyst company task before enabling Hermes for additional employees or tenants.
+- [x] Add the missing public Caveworkers Cloud Run container, build contract, and operator deployment script.
+- [x] Reconcile public deployment and README guidance with the exact four-employee private-Hermes architecture and staged company-release boundary.
+- [x] Replace the overly broad Firestore client rules with verified company-scoped rules for tenant data, jobs, workflows, and payment records.
+- [x] Prepare a no-new-billing public Caveworkers release candidate through the existing managed publishing path, with Hermes and unconfigured external services kept disabled.
+- [ ] Owner-publish the validated no-new-billing candidate through the existing managed publishing interface and verify its live health and four-workspace presentation.
+- [ ] Document the deferred Cloud Run, Secret Manager, billing, and private Hermes requirements for the later full-runtime rollout.

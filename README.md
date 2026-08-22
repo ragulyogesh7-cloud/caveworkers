@@ -13,11 +13,11 @@ Caveworkers is a multi-tenant SaaS control plane for a monitored AI workforce. I
 | Identity | Firebase Google sign-in, Firebase Admin ID-token verification, revocation-checked session cookies |
 | Durable system of record | Firestore for verified users, companies, tenant connectors, employee memory, tasks, approvals, activity logs, and workforce jobs when Firebase is configured |
 | Tenant boundary | The verified Firebase user resolves the company ID; tenant collections and API reads/writes are scoped to that company |
-| AI analyst | OpenRouter-compatible chat completions with Qwen as the preferred provider and Gemini fallback |
+| AI runtime | OpenRouter-compatible model access plus a feature-gated private Hermes Runs API for bounded employee execution |
 | Payments | Razorpay order creation, server-side signature verification, webhook HMAC verification, and trial/plan enforcement |
 | Connectors | Tenant-scoped Gmail, Google Sheets, and HTTPS custom MCP connections with encrypted bearer tokens and per-tool grants |
-| Workforce | A bounded process worker with Firestore-backed queue claims, task traces, employee presence, and SSE workroom updates |
-| Hosting | Dockerized Node service suitable for Google Cloud Run / Google AI Studio deployment |
+| Workforce | Exactly four employee workspaces—Data Analyst, Cybersecurity Analyst, Full Stack Backend Developer, and Software QA/Automation Engineer—with a bounded Firestore-backed worker, task traces, presence, and SSE updates |
+| Hosting | Public Caveworkers Cloud Run service plus separate internal Hermes and capability-bridge Cloud Run services |
 
 The main application entry point is [`server.ts`](server.ts). It currently contains the route layer, middleware, Firebase adapters, employee catalog, connector logic, workroom worker, and payment handlers. The production notes in [`DEPLOYMENT.md`](DEPLOYMENT.md) describe the current single-process worker boundary and the requirements for horizontal scaling.
 
@@ -101,7 +101,7 @@ curl http://localhost:3000/api/health
 | `/login` | Google sign-in entry point | Public |
 | `/onboarding` | Workspace and plan onboarding | Verified Firebase session |
 | `/command` | Tenant command center and company workroom | Verified Firebase session |
-| `/analyst` | David’s data-analysis workspace | Verified Firebase session |
+| `/analyst` | Data Analyst workspace | Verified Firebase session |
 | `/employee/:id` | Employee-specific workspace | Verified Firebase session |
 | `/settings` | Tenant connector and workspace settings | Verified Firebase session |
 | `/api/health` | Liveness/configuration summary | Public |
@@ -142,7 +142,7 @@ Configure the Razorpay key pair and webhook secret through the managed secret st
 
 The always-on worker accepts manager tasks, claims one job at a time, updates the task trace and employee presence, routes collaboration among the employee catalog, and emits tenant-scoped SSE events. Web research is opt-in, bounded, retrieval-only, and protected by HTTPS/private-network URL checks. It must not be treated as an authorization channel.
 
-David can use tenant-configured Gmail read-only, Google Sheets read-only, and custom HTTPS MCP connections. Google OAuth refresh tokens and custom MCP bearer tokens are encrypted with `MCP_TOKEN_ENCRYPTION_KEY`. Tool grants are per connector and per tool. Read operations require an explicit read grant; mutating tools create a pending human approval record and are not dispatched automatically by the current release.
+The four employees can use tenant-configured Gmail read-only, Google Sheets read-only, and custom HTTPS MCP connections only through their assigned contract and grants. Google OAuth refresh tokens and custom MCP bearer tokens are encrypted with `MCP_TOKEN_ENCRYPTION_KEY`. Tool grants are per connector and per tool. Read operations require an explicit read grant; mutating tools create a pending human approval record and are not dispatched automatically by the current release.
 
 For Google connector OAuth, create a Google OAuth 2.0 Web application client and add the exact callback `${PUBLIC_APP_URL}/api/google/oauth/callback` to the authorized redirect URIs. The required scopes are Gmail read-only and Sheets read-only. For custom MCP, production endpoints must use HTTPS and must not resolve to localhost, private-network addresses, or embedded URL credentials.
 
@@ -159,14 +159,13 @@ The checked-in [`.env.example`](.env.example) contains only variables read by th
 | Google connectors | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI` |
 | Connector encryption | `MCP_TOKEN_ENCRYPTION_KEY` |
 | Worker/research | `ALWAYS_ON_WORKER_ENABLED`, `WORKER_POLL_MS`, `WORKER_INSTANCE_ID`, `WEB_RESEARCH_ENABLED`, optional `TAVILY_API_KEY`, `BRAVE_SEARCH_API_KEY` |
+| Private Hermes runtime | `HERMES_ENABLED`, `HERMES_API_URL`, `HERMES_API_KEY`, `HERMES_CLOUD_RUN_AUDIENCE`, `HERMES_MCP_BRIDGE_URL`, `HERMES_MCP_BRIDGE_TOKEN`, `HERMES_CAPABILITY_SIGNING_KEY` |
 
 Use a managed secret store for private values in Cloud Run. Do not copy production secrets into `.env.example`, GitHub Actions logs, browser JavaScript, task payloads, or container build arguments.
 
 ## Production deployment
 
-Read [`DEPLOYMENT.md`](DEPLOYMENT.md) before exposing the service. A production deployment must use HTTPS, verified Google OAuth configuration, a managed secret injection path, Firestore backups and restore testing, Sentry or equivalent alerting, an external rate limiter, and an operational owner for incidents and data deletion requests.
-
-For the configured Google AI Studio / Cloud Run target, build the container with the repository [`Dockerfile`](Dockerfile), deploy it to project `verdant-lotus-g46tg` in region `asia-southeast1`, and keep the service name `caveworkers` unless the environment requires a deliberate change. The runtime service account needs Firestore access and Secret Manager access only to the secrets it requires. Configure the deployed public URL in `PUBLIC_APP_URL`, `ALLOWED_ORIGINS`, Firebase authorized domains, Google OAuth redirect URIs, and Razorpay webhook settings.
+Read [`DEPLOYMENT.md`](DEPLOYMENT.md) and [`docs/company-production-release.md`](docs/company-production-release.md) before exposing the service. A production deployment must use HTTPS, verified Google OAuth configuration, managed secret injection, Firestore backups and restore testing, error monitoring, an external/shared rate-limit plan, and named owners for incidents and deletion requests. The public application is built by the repository [`Dockerfile`](Dockerfile) and deployed with [`deploy-caveworkers.sh`](deploy-caveworkers.sh); use the intended Google Cloud project and public hostname as operator-supplied values rather than hard-coding them in the repository.
 
 Cloud Run may create more than one instance. The current process-local SSE stream, presence cache, activity cache, request limiter, and parts of the task cache therefore require a shared service or sticky single-worker deployment. A controlled single-instance alpha is acceptable while this migration is completed; a public multi-instance release must not rely on independent in-memory queues.
 

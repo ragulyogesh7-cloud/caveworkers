@@ -25,45 +25,52 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/companies/$(companyId)).data.owner_uid == request.auth.uid;
     }
 
-    // User profiles are readable and writable by the authenticated user.
+    // User profiles are provisioned and updated by the verified Express API.
+    // A browser may read only its own profile; all client-side writes are denied.
     match /users/{uid} {
-      allow read, create, update: if ownUser(uid);
-      allow delete: if false;
+      allow read: if ownUser(uid);
+      allow create, update, delete: if false;
     }
 
-    // Company records are tenant-scoped.
+    // Company records are owned by the server. A tenant member can read only
+    // their own company record, never enumerate or alter another company.
     match /companies/{companyId} {
-      allow read: if signedIn();
-      allow create: if signedIn() && request.resource.data.owner_uid == request.auth.uid;
-      allow update: if signedIn() && (resource.data.owner_uid == request.auth.uid || sameCompany(companyId));
-      allow delete: if false;
+      allow read: if sameCompany(companyId);
+      allow create, update, delete: if false;
     }
 
-    // Workforce background queue jobs
+    // The worker queue and schedules are server-owned. A client can inspect
+    // records only when their immutable company_id matches the verified user.
     match /workforce_jobs/{jobId} {
-      allow read, create, update, delete: if signedIn();
+      allow read: if signedIn() && resource.data.company_id == userCompanyId();
+      allow create, update, delete: if false;
     }
 
-    // Scheduled workflows
     match /scheduled_workflows/{workflowId} {
-      allow read, create, update, delete: if signedIn();
+      allow read: if signedIn() && resource.data.company_id == userCompanyId();
+      allow create, update, delete: if false;
     }
 
-    // Payments and subscription orders
+    // Payment records are exposed through the authenticated API only. This
+    // rule permits a tenant-scoped read but prevents any browser mutation.
     match /payments/{paymentId} {
-      allow read: if signedIn();
-      allow create, update: if signedIn();
-      allow delete: if false;
+      allow read: if signedIn() && resource.data.company_id == userCompanyId();
+      allow create, update, delete: if false;
     }
 
-    // All tenant subcollections under /tenants/{companyId}/
+    // All tenant subcollections—including tasks, approvals, conversations,
+    // memory, audit evidence, connectors, and Hermes draft artifacts—are
+    // readable only by the verified member of the matching company. The
+    // Express service uses Firebase Admin and remains the exclusive writer.
     match /tenants/{companyId}/{collection}/{documentId} {
-      allow read, create, update, delete: if signedIn();
+      allow read: if sameCompany(companyId);
+      allow create, update, delete: if false;
     }
 
-    // Legacy/nested tenant subcollections under /companies/{companyId}/
+    // Retain the same restrictive boundary for legacy company subcollections.
     match /companies/{companyId}/{collection}/{documentId} {
-      allow read, create, update, delete: if signedIn();
+      allow read: if sameCompany(companyId);
+      allow create, update, delete: if false;
     }
   }
 }

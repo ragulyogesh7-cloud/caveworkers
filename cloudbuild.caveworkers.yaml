@@ -1,0 +1,9 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --file=Dockerfile
+      - --tag=asia-southeast1-docker.pkg.dev/$PROJECT_ID/caveworkers/caveworkers:$COMMIT_SHA
+      - .
+images:
+  - asia-southeast1-docker.pkg.dev/$PROJECT_ID/caveworkers/caveworkers:$COMMIT_SHA
