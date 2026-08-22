@@ -3878,7 +3878,7 @@ app.get('/analyst', (req, res) => {
   const user = getAuthUser(req);
   if (!user) return res.redirect('/login');
   if (!user.onboarded) return res.redirect('/onboarding');
-  res.render('analyst', { firebase_config: FIREBASE_WEB_CONFIG, user, org_id: user.company_id || '', analyst_model: OPENROUTER_KEY_READY ? ANALYST_MODEL : (genAIClient ? 'Gemini fallback' : 'Preview planner') });
+  return res.redirect('/employee/data_analyst');
 });
 
 app.get('/employee/:id', (req, res) => {
@@ -5204,12 +5204,12 @@ async function handleTaskRoutingAsync(question: string, companyId: string, prefe
     created_at: new Date(Date.now() + 120 + index * 180).toISOString()
   }));
   const trace: any[] = [
-    { kind: 'received', thread_role: 'manager_request', sender: 'Manager', receiver: directEmployeeId ? lead.name : 'Sarah', sender_id: 'manager', receiver_id: directEmployeeId ? lead.id : manager.id, body: `New task: “${question}”`, created_at: now },
+    { kind: 'received', thread_role: 'manager_request', sender: 'Manager', receiver: directEmployeeId ? lead.name : manager.name, sender_id: 'manager', receiver_id: directEmployeeId ? lead.id : manager.id, body: `New task: “${question}”`, created_at: now },
     ...introductionTrace,
     {
       kind: 'team_context',
       thread_role: 'coordination',
-      sender: directEmployeeId ? lead.name : 'Sarah',
+      sender: directEmployeeId ? lead.name : manager.name,
       receiver: directEmployeeId ? 'Manager' : lead.name,
       sender_id: directEmployeeId ? lead.id : manager.id,
       receiver_id: directEmployeeId ? 'manager' : lead.id,
@@ -5223,7 +5223,7 @@ async function handleTaskRoutingAsync(question: string, companyId: string, prefe
     ...(webResearch.length ? [{ kind: 'web_research', thread_role: 'context', sender: 'Caveworkers research desk', receiver: 'Company workroom', body: `Collected ${webResearch.length} public source${webResearch.length === 1 ? '' : 's'} for the team. Sources remain linked in the task evidence panel.`, created_at: new Date(Date.now() + 650).toISOString() }] : [])
   ];
   collaborators.forEach((employee, index) => {
-    trace.push({ kind: 'group_message', thread_role: 'assignment', sender: directEmployeeId ? lead.name : 'Sarah', receiver: `@${employee.name}`, sender_id: directEmployeeId ? lead.id : manager.id, receiver_id: employee.id, mentions: [employee.id, lead.id], body: `@${employee.name}, please assist with the ${employee.department.toLowerCase()} portion of this request. Return usable findings and safe evidence.`, created_at: new Date(Date.now() + 900 + index * 600).toISOString() });
+    trace.push({ kind: 'group_message', thread_role: 'assignment', sender: directEmployeeId ? lead.name : manager.name, receiver: `@${employee.name}`, sender_id: directEmployeeId ? lead.id : manager.id, receiver_id: employee.id, mentions: [employee.id, lead.id], body: `@${employee.name}, please assist with the ${employee.department.toLowerCase()} portion of this request. Return usable findings and safe evidence.`, created_at: new Date(Date.now() + 900 + index * 600).toISOString() });
     trace.push({ kind: 'handoff', thread_role: 'handoff', sender: employee.name, receiver: lead.name, sender_id: employee.id, receiver_id: lead.id, mentions: [lead.id], body: collaborationFinding(employee, question, contextByEmployeeId.get(employee.id), lead.name), created_at: new Date(Date.now() + 1200 + index * 600).toISOString() });
     trace.push({ kind: 'handoff_ack', thread_role: 'handoff_ack', sender: lead.name, receiver: employee.name, sender_id: lead.id, receiver_id: employee.id, mentions: [employee.id], body: `@${employee.name}, received. Folding your findings into the deliverables.`, created_at: new Date(Date.now() + 1450 + index * 600).toISOString() });
   });
@@ -5256,7 +5256,7 @@ Next step: configure a valid OpenRouter or Gemini model key, then rerun this req
   let workforceApproval: ApprovalRecord | null = null;
   let autoExecuteAction = false;
   if (requiresApproval) {
-    const emailAction = isEmailAction ? await prepareEmployeeEmailAction(companyId, question, taskId, emailEmployeeId || (directEmployeeId || 'sarah')) : null;
+    const emailAction = isEmailAction ? await prepareEmployeeEmailAction(companyId, question, taskId, emailEmployeeId || (directEmployeeId || manager.id)) : null;
     const mcpAction = !emailAction && isGitHubWriteAction ? await prepareEmployeeMcpWriteAction(companyId, question, taskId, preferredEmployeeId || lead.id) : null;
     execution = emailAction ? { action_type: 'gmail.send', status: emailAction.status, summary: emailAction.summary, updated_at: new Date().toISOString() } : mcpAction ? { action_type: 'mcp.tool', status: mcpAction.status, summary: mcpAction.summary, updated_at: new Date().toISOString() } : { action_type: 'external.action', status: 'awaiting_approval', summary: 'The requested external action is prepared and awaiting your approval. No external action has been performed.', updated_at: new Date().toISOString() };
     const actionBlocked = emailAction?.status === 'blocked' || mcpAction?.status === 'blocked';
@@ -5294,7 +5294,7 @@ Next step: configure a valid OpenRouter or Gemini model key, then rerun this req
   }
   trace.push({ kind: 'completed', sender: lead.name, receiver: 'Task ledger', body: requiresApproval ? `Work product completed; execution state: ${execution.status}.` : 'Work product completed with a tenant-scoped audit trace.', created_at: new Date(Date.now() + 3600).toISOString() });
   const liveToolEvidence = specialistContexts.flatMap((context) => context.live_tool_evidence);
-  const taskRecord: TaskRecord = { id: taskId, company_id: companyId, question, owner: manager.id, direct_employee_id: directEmployeeId, status: execution.status === 'awaiting_approval' ? 'pending_approval' : execution.status === 'blocked' ? 'blocked' : 'completed', answer, plan: directEmployeeId ? `1. ${lead.name} direct response → 2. Sarah manager oversight → 3. Permissioned evidence → 4. Approval-gated external execution when requested` : `1. Sarah intake → 2. Delegate ${lead.name} → 3. Specialist delivery${collaborators.length ? ` (${collaborators.map((employee) => employee.name).join(', ')})` : ''} → 4. Permissioned evidence → 5. Sarah manager response → 6. Approval-gated external execution when requested`, created_at: now, trace, participants: ['Manager', manager.name, ...deliveryTeam.map((employee) => employee.name).filter((name, index, list) => list.indexOf(name) === index)], collaboration_summary: `${directEmployeeId ? `${lead.name} responded directly with Sarah overseeing` : `${manager.name} managed ${lead.name}${collaborators.length ? ` with ${collaborators.length} supporting specialist${collaborators.length === 1 ? '' : 's'}` : ''}`}.`, live_tool_evidence: liveToolEvidence, web_research: webResearch, queued_at: existingTask?.queued_at, started_at: existingTask?.started_at || now, completed_at: new Date().toISOString(), execution };
+  const taskRecord: TaskRecord = { id: taskId, company_id: companyId, question, owner: manager.id, direct_employee_id: directEmployeeId, status: execution.status === 'awaiting_approval' ? 'pending_approval' : execution.status === 'blocked' ? 'blocked' : 'completed', answer, plan: directEmployeeId ? `1. ${lead.name} direct response → 2. ${manager.name} oversight → 3. Permissioned evidence → 4. Approval-gated external execution when requested` : `1. ${manager.name} intake → 2. Delegate ${lead.name} → 3. Specialist delivery${collaborators.length ? ` (${collaborators.map((employee) => employee.name).join(', ')})` : ''} → 4. Permissioned evidence → 5. ${manager.name} response → 6. Approval-gated external execution when requested`, created_at: now, trace, participants: ['Manager', manager.name, ...deliveryTeam.map((employee) => employee.name).filter((name, index, list) => list.indexOf(name) === index)], collaboration_summary: `${directEmployeeId ? `${lead.name} responded directly with ${manager.name} overseeing` : `${manager.name} managed ${lead.name}${collaborators.length ? ` with ${collaborators.length} supporting specialist${collaborators.length === 1 ? '' : 's'}` : ''}`}.`, live_tool_evidence: liveToolEvidence, web_research: webResearch, queued_at: existingTask?.queued_at, started_at: existingTask?.started_at || now, completed_at: new Date().toISOString(), execution };
   db.tasks.set(taskId, taskRecord);
   await persistTaskRecord(taskRecord);
   if (autoExecuteAction && workforceApproval) {
@@ -5312,7 +5312,7 @@ Next step: configure a valid OpenRouter or Gemini model key, then rerun this req
       execution = taskRecord.execution || execution;
     }
   }
-  await persistActivityLog(companyId, { id: Date.now(), sender: manager.name, receiver: lead.name, kind: 'task.managed', body: `Task #${taskId} was managed by Sarah with execution state ${execution.status}.`, created_at: now });
+  await persistActivityLog(companyId, { id: Date.now(), sender: manager.name, receiver: lead.name, kind: 'task.managed', body: `Task #${taskId} was managed by ${manager.name} with execution state ${execution.status}.`, created_at: now });
   return { id: taskId, company_id: companyId, question, status: taskRecord.status, owner: manager.id, direct_employee_id: directEmployeeId, participants: taskRecord.participants, plan: taskRecord.plan, answer, execution, trace: taskRecord.trace, live_tool_evidence: liveToolEvidence, web_research: webResearch, collaboration_summary: taskRecord.collaboration_summary, workforce_size: workforce.length };
 }
 

@@ -24,3 +24,5 @@
 - [x] Run the complete automated suite and document the tenant-scoped employee workspace isolation results.
 - [x] Commit the legacy-suite fixes and prepare the repository for owner-initiated production publishing.
 - [x] Push the completed workforce and legacy-suite commits to the selected GitHub main branch and confirm the remote commit IDs.
+- [x] Verify the published owner-facing workforce and employee workspace isolation at mycaveworkers.ai.studio without external side effects.
+- [x] Replace stale Sarah, David, and legacy-ten-employee references in the owner-facing four-avatar workforce copy and republish the correction.

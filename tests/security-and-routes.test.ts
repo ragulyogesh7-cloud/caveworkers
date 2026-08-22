@@ -138,6 +138,7 @@ describe('Caveworkers current workforce and billing invariants', () => {
       expect(result.company_id, fixture.id).toBe('company-a');
       expect(result.participants, fixture.id).toEqual(expect.arrayContaining(['Manager', fixture.expected_name]));
       expect(result.trace, fixture.id).not.toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'internal_reasoning' })]));
+      expect(JSON.stringify({ trace: result.trace, plan: result.plan, summary: result.collaboration_summary }), fixture.id).not.toContain('Sarah');
       expect(result.participants.every((participant: string) => participant === 'Manager' || FOUR_EMPLOYEES.some((employee) => employee.name === participant)), fixture.id).toBe(true);
     }
   }, 90000);

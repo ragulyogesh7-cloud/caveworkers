@@ -382,7 +382,7 @@ function renderWorkforceStage() {
   const peers = employees.filter((employee) => employee.id !== coordinator.id).slice(0, 3);
   const active = workroomPresence.filter((entry) => ['working', 'coordinating', 'reviewing'].includes(entry.status)).length;
   if (activeCount) activeCount.textContent = `${active || employees.length ? active : 0} active`;
-  coordinatorNode.innerHTML = `<a class="map-person map-person-coordinator" href="/employee/${encodeURIComponent(coordinator.id || '')}" title="Open ${safe(coordinator.name)}’s workspace">${avatarMarkup(coordinator, coordinator.name?.[0] || 'S', 'map-avatar')}<span><b>${safe(coordinator.name || 'Sarah')}</b><small>${safe(coordinator.role || 'Coordinator')}</small></span></a>`;
+  coordinatorNode.innerHTML = `<a class="map-person map-person-coordinator" href="/employee/${encodeURIComponent(coordinator.id || '')}" title="Open ${safe(coordinator.name)}’s workspace">${avatarMarkup(coordinator, coordinator.name?.[0] || 'A', 'map-avatar')}<span><b>${safe(coordinator.name || 'AI Lead')}</b><small>${safe(coordinator.role || 'Coordinator')}</small></span></a>`;
   rightNode.innerHTML = peers.map((employee, index) => `<a class="map-person map-person-peer peer-${index + 1}" href="/employee/${encodeURIComponent(employee.id || '')}" title="Open ${safe(employee.name)}’s workspace">${avatarMarkup(employee, employee.name?.[0] || 'AI', 'map-avatar')}<span><b>${safe(employee.name)}</b><small>${safe(employee.role || 'Specialist')}</small></span></a>`).join('');
   roster.innerHTML = employees.slice(0, 8).map((employee, index) => { const status = employeeStatus(employee.id); return `<a class="stage-roster-item" style="--roster-delay:${Math.min(index, 7) * 35}ms;--avatar-color:${safe(employee.color || '#82e9ff')}" href="/employee/${encodeURIComponent(employee.id)}" data-stage-employee-id="${safe(employee.id)}">${avatarMarkup(employee, employee.name?.[0] || 'AI', 'roster-avatar')}<span><b>${safe(employee.name)}</b><small>${safe(employee.role || 'Specialist')}</small></span><em class="roster-state ${safe(status)}">${safe(status.replace(/_/g, ' '))}</em></a>`; }).join('');
 }
@@ -484,7 +484,7 @@ function cleanChatCopy(value) {
     .replace(/^\s*#{1,6}\s*/gm, '')
     .replace(/^\s*>\s?/gm, '')
     .replace(/^\s*[-*]\s+/gm, '')
-    .replace(/^\s*\*{0,2}(Blocker|Work completed|Current result|Next action|Your request|Delivery lead|Team|Sarah[’']s manager update)\*{0,2}\s*:\s*/gim, '')
+    .replace(/^\s*\*{0,2}(Blocker|Work completed|Current result|Next action|Your request|Delivery lead|Team|Manager update)\*{0,2}\s*:\s*/gim, '')
     .replace(/\*\*(.*?)\*\*/g, '$1')
     .replace(/__(.*?)__/g, '$1')
     .replace(/`([^`]+)`/g, '$1')
@@ -538,7 +538,7 @@ function renderRoomFeed(shouldFollow = roomAtLatest()) {
     const recipient = message.receiver && message.receiver !== 'Manager' ? `<span class="message-recipient">to ${safe(message.receiver)}</span>` : '';
     const mentionNames = Array.isArray(message.mentions) ? message.mentions.map((id) => employeeById(id)?.name || id).filter(Boolean) : [];
     const mentionMarkup = mentionNames.length ? `<span class="message-mentions">${mentionNames.map((name) => `@${safe(name)}`).join(' ')}</span>` : '';
-    const messageLabel = tone === 'result' ? (message.kind === 'final_answer' ? 'Final answer' : 'Team update') : tone === 'approval' ? 'Needs your attention' : tone === 'failure' ? 'Blocked' : tone === 'complete' ? 'Completed' : tone === 'introduction' ? 'Introduces self' : tone === 'handoff' && message.kind === 'handoff_ack' ? 'Handoff received' : tone === 'handoff' ? 'Handoff' : message.kind === 'team_context' ? 'Team chat' : message.kind === 'queued' ? 'Sarah is coordinating' : '';
+    const messageLabel = tone === 'result' ? (message.kind === 'final_answer' ? 'Final answer' : 'Team update') : tone === 'approval' ? 'Needs your attention' : tone === 'failure' ? 'Blocked' : tone === 'complete' ? 'Completed' : tone === 'introduction' ? 'Introduces self' : tone === 'handoff' && message.kind === 'handoff_ack' ? 'Handoff received' : tone === 'handoff' ? 'Handoff' : message.kind === 'team_context' ? 'Team chat' : message.kind === 'queued' ? 'Workforce is coordinating' : '';
     article.dataset.chatId = message.chat_id || '';
     article.innerHTML = `${avatarMarkup(senderEmployee || { id: '', color: tone === 'approval' ? '#ffd78f' : '#82e9ff' }, senderName, 'message-dp')}<div class="message-body"><div class="message-meta"><b>${safe(senderName)}</b>${recipient}${mentionMarkup}${messageLabel ? `<span class="message-label ${tone}">${safe(messageLabel)}</span>` : ''}<time>${formatTime(message.created_at)}</time>${taskReference}${voiceAction}${deleteAction}</div>${tone === 'result' ? '<span class="final-answer-label">Final answer</span>' : ''}<p>${safe(cleanChatCopy(message.body || ''))}</p>${message.pending ? '<span class="typing-dots"><i></i><i></i><i></i></span>' : ''}${approvalAction}</div>`;
     fragment.append(article);
@@ -622,7 +622,7 @@ function applyWorkroomEvent(event) {
     saveRoomCache();
     void Promise.all([loadTaskSummaries(), loadApprovals(), loadRoiDashboard(), loadActivationDashboard()]);
   }
-  setRoomConnection('LIVE', `${employees.length || 10} employees can address one another in the room.`);
+  setRoomConnection('LIVE', `${employees.length} employees can address one another in the room.`);
 }
 
 async function loadWorkroomSnapshot() {
@@ -633,7 +633,7 @@ async function loadWorkroomSnapshot() {
     saveRoomCache();
     renderWorkroomPresence();
     rebuildWorkroomMessages();
-    setRoomConnection('LIVE', `${employees.length || 10} employees can address one another in the room.`);
+    setRoomConnection('LIVE', `${employees.length} employees can address one another in the room.`);
   } catch (error) {
     console.error('Unable to load company workroom:', error);
     setRoomConnection('UNAVAILABLE', 'The room is temporarily unavailable. Retrying when the connection returns.');
@@ -690,7 +690,7 @@ async function resolveApproval(id, status) {
   try {
     const result = await responseJson(`/api/approvals/${encodeURIComponent(id)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) });
     const summary = result.execution?.summary;
-    setRoomNotice(summary || (status === 'approved' ? 'Approval recorded. Sarah is now reporting the execution outcome in the room.' : 'Approval request rejected. Sarah has kept the work product and stopped the external action.'), 'success');
+    setRoomNotice(summary || (status === 'approved' ? 'Approval recorded. The assigned employee is now reporting the execution outcome in the room.' : 'Approval request rejected. The work product was retained and the external action was stopped.'), 'success');
     await Promise.all([loadApprovals(), loadTaskSummaries(), loadWorkroomSnapshot()]);
   } catch (error) {
     setRoomNotice(error.payload?.execution?.summary || error.message || 'The approval could not be updated.', 'error');
@@ -715,7 +715,7 @@ async function loadTaskSummaries() {
     const data = await responseJson('/api/tasks');
     taskSummaries = data.tasks || [];
     if (badge) badge.textContent = String(data.total_count || taskSummaries.length);
-    container.innerHTML = taskSummaries.length ? taskSummaries.slice(0, 5).map((task) => `<button class="task-summary" data-task-id="${safe(task.id)}" type="button"><span class="task-summary-icon">${safe(task.owner_info?.name?.[0] || 'AI')}</span><span><b>${safe(task.question || 'Untitled task')}</b><small>${safe(task.status === 'blocked' ? task.execution?.summary || 'Sarah needs a connector or action detail.' : `${task.owner_info?.name || 'Sarah'} · ${relativeTime(task.created_at)}`)}</small></span><em class="task-summary-status ${safe(task.status)}">${safe(taskStatusLabel(task.status))}</em></button>`).join('') : '<p class="empty-state-sm">No tasks yet. Assign the first one in the company room.</p>';
+    container.innerHTML = taskSummaries.length ? taskSummaries.slice(0, 5).map((task) => `<button class="task-summary" data-task-id="${safe(task.id)}" type="button"><span class="task-summary-icon">${safe(task.owner_info?.name?.[0] || 'AI')}</span><span><b>${safe(task.question || 'Untitled task')}</b><small>${safe(task.status === 'blocked' ? task.execution?.summary || 'A required connector or action detail is missing.' : `${task.owner_info?.name || 'Workforce'} · ${relativeTime(task.created_at)}`)}</small></span><em class="task-summary-status ${safe(task.status)}">${safe(taskStatusLabel(task.status))}</em></button>`).join('') : '<p class="empty-state-sm">No tasks yet. Assign the first one in the company room.</p>';
   } catch (error) {
     console.error('Unable to load tasks:', error);
     container.innerHTML = '<p class="empty-state-sm">Recent tasks are unavailable right now.</p>';
