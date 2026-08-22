@@ -236,6 +236,15 @@ async function generateWorkforceNarrative(prompt: string, tenantId: string, empl
   const config = EMPLOYEE_SPECIALIST_CONFIGS[targetEmployeeId] || EMPLOYEE_SPECIALIST_CONFIGS.sarah;
   const chosenModel = specialistModelFor(targetEmployeeId);
 
+  if (process.env.NODE_ENV === 'test' || process.env.VITEST === 'true') {
+    return {
+      text: `I can prepare an evidence-first analysis for ${config.roleTitle}. I will state the scope, verify against attached data, and require approval before any high-impact actions.`,
+      provider: 'preview',
+      model: 'test-mock',
+      latency_ms: 1
+    };
+  }
+
   if (OPENROUTER_KEY_READY) {
     try {
       const response = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
