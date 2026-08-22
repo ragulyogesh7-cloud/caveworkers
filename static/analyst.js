@@ -110,12 +110,47 @@
     $('#analyst-trace').innerHTML = trace.map((step) => `<div class="trace-step"><span>${esc(step.stage)}</span><p>${esc(step.body)}</p></div>`).join('');
   }
 
+  function renderMarkdown(text) {
+    if (!text) return '<p>No report was returned.</p>';
+    const lines = text.split('\n');
+    let html = '';
+    let inList = false;
+    for (let rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line) {
+        if (inList) { html += '</ul>'; inList = false; }
+        continue;
+      }
+      if (line.startsWith('### ')) {
+        if (inList) { html += '</ul>'; inList = false; }
+        html += `<h4>${esc(line.slice(4))}</h4>`;
+      } else if (line.startsWith('## ')) {
+        if (inList) { html += '</ul>'; inList = false; }
+        html += `<h3>${esc(line.slice(3))}</h3>`;
+      } else if (line.startsWith('# ')) {
+        if (inList) { html += '</ul>'; inList = false; }
+        html += `<h2>${esc(line.slice(2))}</h2>`;
+      } else if (line.startsWith('- ') || line.startsWith('* ') || /^\d+\.\s/.test(line)) {
+        if (!inList) { html += '<ul>'; inList = true; }
+        const itemText = line.startsWith('- ') || line.startsWith('* ') ? line.slice(2) : line.replace(/^\d+\.\s/, '');
+        const content = esc(itemText).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        html += `<li>${content}</li>`;
+      } else {
+        if (inList) { html += '</ul>'; inList = false; }
+        const content = esc(line).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        html += `<p>${content}</p>`;
+      }
+    }
+    if (inList) html += '</ul>';
+    return html;
+  }
+
   function showRun(run) {
     state.latestRun = run;
     const result = $('#analysis-result'); result.hidden = false;
     $('#result-heading').textContent = run.status === 'awaiting_approval' ? 'Draft analysis ready for review' : 'Latest analysis';
     $('#result-state').textContent = run.status === 'awaiting_approval' ? 'AWAITING APPROVAL' : 'COMPLETE';
-    $('#result-report-body').textContent = run.report || 'No report was returned.';
+    $('#result-report-body').innerHTML = renderMarkdown(run.report || 'No report was returned.');
     $('#result-notice').textContent = run.status === 'awaiting_approval' ? 'David prepared the analysis, but the requested external action remains a draft. Review it in the approval queue before any connector is allowed to act.' : 'This result is scoped to your workspace. Live source values and external delivery remain controlled by the configured permissions.';
     renderChart(run.chart); renderTrace(run.trace || []);
     result.scrollIntoView({ behavior: 'smooth', block: 'start' });
