@@ -853,6 +853,20 @@ interface TaskRecord {
   };
 }
 
+interface WorkroomDiscussionMessage {
+  id: string;
+  company_id: string;
+  sender: string;
+  sender_id: string;
+  receiver: 'Company room';
+  receiver_id: 'company-room';
+  kind: 'manager_note';
+  thread_role: 'discussion';
+  body: string;
+  chat_visible: true;
+  created_at: string;
+}
+
 interface WorkforceLiveToolEvidence {
   employee_id: string;
   employee_name: string;
@@ -1078,6 +1092,8 @@ const db = {
   approvalTenantsLoaded: new Set<string>(),
   employeeMemory: new Map<string, EmployeeMemory[]>(),
   employeePlans: new Map<string, EmployeePrebuildPlan>(),
+  workroomMessages: new Map<string, WorkroomDiscussionMessage[]>(),
+  workroomMessagesLoaded: new Set<string>(),
   taskTenantsLoaded: new Set<string>(),
   workforceQueue: new Map<string, WorkforceQueueJob>(),
   employeePresence: new Map<string, { employee_id: string; status: 'idle' | 'working' | 'offline'; task_id?: number; last_seen_at: string }>(),
@@ -1201,6 +1217,10 @@ function conversationCollection(companyId: string) {
 
 function employeePlanCollection(companyId: string) {
   return analystTenantCollection(companyId, 'employee_prebuild_plans');
+}
+
+function workroomMessageCollection(companyId: string) {
+  return analystTenantCollection(companyId, 'workroom_messages');
 }
 
 function employeePlanKey(companyId: string, employeeId: string) {
@@ -1492,6 +1512,36 @@ async function persistTaskRecord(task: TaskRecord) {
     } catch (error) {
       console.warn('Could not persist task record to Firestore:', error);
     }
+  }
+}
+
+async function hydrateWorkroomMessages(companyId: string) {
+  if (db.workroomMessagesLoaded.has(companyId)) return;
+  db.workroomMessagesLoaded.add(companyId);
+  const collection = workroomMessageCollection(companyId);
+  if (!collection) return;
+  try {
+    const snapshot = await collection.orderBy('created_at', 'desc').limit(120).get();
+    const messages = snapshot.docs
+      .map((doc) => ({ id: doc.id, ...(doc.data() || {}) }) as WorkroomDiscussionMessage)
+      .filter((message) => message.company_id === companyId && message.kind === 'manager_note' && message.body)
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    db.workroomMessages.set(companyId, messages);
+  } catch (error) {
+    if (!isInitialDatabaseStatusError(error)) reportOperationalFailure('workroom_message.hydration', error, { tenant_hash: anonymizeIdentifier(companyId) });
+  }
+}
+
+async function persistWorkroomMessage(message: WorkroomDiscussionMessage) {
+  const current = db.workroomMessages.get(message.company_id) || [];
+  db.workroomMessages.set(message.company_id, [...current.filter((entry) => entry.id !== message.id), message].slice(-120));
+  db.workroomMessagesLoaded.add(message.company_id);
+  const collection = workroomMessageCollection(message.company_id);
+  if (!collection) return;
+  try {
+    await collection.doc(message.id).set(stripUndefined(message));
+  } catch (error) {
+    reportOperationalFailure('workroom_message.persistence', error, { tenant_hash: anonymizeIdentifier(message.company_id) });
   }
 }
 
@@ -1954,7 +2004,7 @@ async function anonymizeTenantAuditEvents(companyId: string) {
 }
 
 async function deleteTenantFirestoreData(companyId: string) {
-  const subcollections = ['settings', 'employees', 'connectors', 'employee_memory', 'conversations', 'tasks', 'activity', 'usage_ledger', 'activation_events', 'approvals', 'data_sources', 'long_term_memory', 'analyst_runs', 'data_exports', 'deletion_requests'];
+  const subcollections = ['settings', 'employees', 'connectors', 'employee_memory', 'conversations', 'tasks', 'workroom_messages', 'activity', 'usage_ledger', 'activation_events', 'approvals', 'data_sources', 'long_term_memory', 'analyst_runs', 'data_exports', 'deletion_requests'];
   if (firestoreDb) {
     for (const collectionName of subcollections) {
       const collection = firestoreDb.collection('tenants').doc(companyId).collection(collectionName);
@@ -1981,6 +2031,8 @@ function clearTenantCaches(companyId: string) {
   db.analystDataSources.delete(companyId);
   db.analystMemory.delete(companyId);
   db.analystRuns.delete(companyId);
+  db.workroomMessages.delete(companyId);
+  db.workroomMessagesLoaded.delete(companyId);
   db.activityLoaded.delete(companyId);
   db.taskTenantsLoaded.delete(companyId);
   db.approvalTenantsLoaded.delete(companyId);
@@ -4877,8 +4929,37 @@ app.get('/api/workforce/workroom', async (req, res) => {
   if (!user || !companyId) return;
   await hydrateTenantTasks(companyId);
   await hydrateTenantApprovals(companyId);
+  await hydrateWorkroomMessages(companyId);
   const tasks = Array.from(db.tasks.values()).filter((task) => task.company_id === companyId).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 30).map(workroomSnapshot);
-  res.json({ company: { id: companyId, name: user.company_name || 'Your company' }, employees: activeWorkforce(companyId), presence: companyPresence(companyId), tasks, worker: { enabled: ALWAYS_ON_WORKER_ENABLED, instance: WORKER_INSTANCE_ID, poll_ms: WORKER_POLL_MS }, research: { enabled: WEB_RESEARCH_ENABLED && Boolean(TAVILY_API_KEY || BRAVE_SEARCH_API_KEY) } });
+  const messages = [...(db.workroomMessages.get(companyId) || [])].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).slice(-120);
+  res.json({ company: { id: companyId, name: user.company_name || 'Your company' }, employees: activeWorkforce(companyId), presence: companyPresence(companyId), tasks, messages, worker: { enabled: ALWAYS_ON_WORKER_ENABLED, instance: WORKER_INSTANCE_ID, poll_ms: WORKER_POLL_MS }, research: { enabled: WEB_RESEARCH_ENABLED && Boolean(TAVILY_API_KEY || BRAVE_SEARCH_API_KEY) } });
+});
+
+app.post('/api/workforce/workroom/messages', async (req, res) => {
+  const user = getAuthUser(req);
+  const companyId = getTenantIdOrFail(req, res);
+  if (!user || !companyId) return;
+  if (await enforceWorkspaceAccess(req, res)) return;
+  if (isRateLimited(rateLimitKey(req, 'workroom_message'), 30, 60_000)) return res.status(429).json({ error: 'Too many company-room messages. Please wait a moment before sending another note.' });
+  const body = String(req.body?.message || '').trim().slice(0, 6000);
+  if (!body) return res.status(400).json({ error: 'A company-room message is required.' });
+  const message: WorkroomDiscussionMessage = {
+    id: `room_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
+    company_id: companyId,
+    sender: user.display_name || 'Manager',
+    sender_id: user.uid,
+    receiver: 'Company room',
+    receiver_id: 'company-room',
+    kind: 'manager_note',
+    thread_role: 'discussion',
+    body,
+    chat_visible: true,
+    created_at: new Date().toISOString()
+  };
+  await persistWorkroomMessage(message);
+  await persistAuditEvent({ id: `audit_${message.id}`, company_id: companyId, actor_type: 'user', actor_id: user.uid, action: 'workroom.message_posted', resource_type: 'workroom_message', resource_id: message.id, risk: 'low', status: 'succeeded', summary: 'Posted a company-room discussion message without queueing agent work.', correlation_id: message.id, created_at: message.created_at });
+  emitWorkroomEvent(companyId, undefined, { type: 'message', message });
+  res.status(201).json({ message, queued: false });
 });
 
 app.post('/api/workforce/workroom', async (req, res) => {

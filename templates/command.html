@@ -56,10 +56,10 @@
             <div class="room-jump-wrap"><button class="room-jump" id="jump-to-latest" type="button" hidden>Jump to latest ↓</button></div>
 
             <form class="room-composer clean-room-composer" id="room-composer">
-              <div class="room-composer-top"><label for="request">Assign work to the room</label><span><i class="signal-dot"></i> Autonomy follows each employee’s tool belt</span></div>
-              <textarea id="request" rows="3" maxlength="6000" placeholder="Tell the team the outcome you need…"></textarea>
+              <div class="room-composer-top"><label for="request">Message or assign work to the room</label><span><i class="signal-dot"></i> Autonomy follows each employee’s tool belt</span></div>
+              <textarea id="request" rows="3" maxlength="6000" placeholder="Share a note with the room, or describe the outcome you need…"></textarea>
               <div class="composer-quickbar"><button class="connector-plus" id="connector-plus" type="button" aria-expanded="false" aria-controls="room-connector-directory" title="Connect a tool or app"><span aria-hidden="true">+</span><span>Connect a tool</span></button><span class="composer-quickhint">Browse verified tools for the whole workforce</span></div>
-              <div class="room-composer-bottom"><label class="assignment-control" for="task-assignee"><span>Lead</span><select id="task-assignee" aria-label="Choose who should lead this task"><option value="">Auto-route the team</option><option value="__whole_team__">Whole team</option></select></label><div class="composer-actions"><span class="composer-hint"><i class="signal-dot"></i> High-impact actions follow workspace policy</span><button class="run-button" id="run" type="submit">Start the work <span>↗</span></button></div></div>
+              <div class="room-composer-bottom"><label class="assignment-control" for="task-assignee"><span>Lead</span><select id="task-assignee" aria-label="Choose who should lead this task"><option value="">Auto-route the team</option><option value="__whole_team__">Whole team</option></select></label><div class="composer-actions"><span class="composer-hint"><i class="signal-dot"></i>Notes never start agent work; role work needs an approved plan</span><button class="button button-secondary" id="send-note" type="button">Send note</button><button class="run-button" id="run" type="submit">Start the work <span>↗</span></button></div></div>
             </form>
 
               <div class="room-directory-modal" id="room-connector-directory" hidden role="dialog" aria-modal="true" aria-labelledby="room-directory-title">

@@ -3,6 +3,7 @@ const $ = (selector) => document.querySelector(selector);
 let employees = [];
 let workroomSource = null;
 let workroomMessages = [];
+let workroomGeneralMessages = [];
 let workroomPresence = [];
 let workroomTasks = [];
 let taskSummaries = [];
@@ -560,7 +561,7 @@ function renderRoomFeed(shouldFollow = roomAtLatest()) {
 }
 
 function rebuildWorkroomMessages() {
-  const source = [];
+  const source = [...workroomGeneralMessages];
   workroomTasks.forEach((task) => {
     (task.chat_messages || []).forEach((message) => { if (message?.body) source.push({ ...message, task_id: task.id, chat_visible: true }); });
   });
@@ -630,6 +631,7 @@ async function loadWorkroomSnapshot() {
     const snapshot = await responseJson('/api/workforce/workroom');
     workroomPresence = snapshot.presence || [];
     workroomTasks = snapshot.tasks || [];
+    workroomGeneralMessages = snapshot.messages || [];
     saveRoomCache();
     renderWorkroomPresence();
     rebuildWorkroomMessages();
@@ -773,6 +775,27 @@ async function submitTask(event) {
     button.disabled = false;
     button.innerHTML = 'Start the work <span>↗</span>';
     input.focus();
+  }
+}
+
+async function submitRoomNote() {
+  const input = $('#request');
+  const button = $('#send-note');
+  const message = input?.value.trim();
+  if (!message) { input?.focus(); return; }
+  if (button) { button.disabled = true; button.textContent = 'Sending…'; }
+  try {
+    const result = await responseJson('/api/workforce/workroom/messages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message }) });
+    input.value = '';
+    const posted = result.message;
+    if (posted && !workroomGeneralMessages.some((entry) => messageKey(entry) === messageKey(posted))) workroomGeneralMessages.push(posted);
+    rebuildWorkroomMessages();
+    setRoomNotice('Your note was shared with the company room. No agent work was started.', 'success');
+  } catch (error) {
+    setRoomNotice(error.message || 'The company-room note could not be sent.', 'error');
+  } finally {
+    if (button) { button.disabled = false; button.textContent = 'Send note'; }
+    input?.focus();
   }
 }
 
@@ -975,6 +998,7 @@ function bindRoomDirectoryInteractions() {
 
 function bindRoomInteractions() {
   $('#room-composer')?.addEventListener('submit', submitTask);
+  $('#send-note')?.addEventListener('click', () => { void submitRoomNote(); });
   $('#request')?.addEventListener('keydown', (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') $('#room-composer')?.requestSubmit();
   });

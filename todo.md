@@ -51,4 +51,5 @@
 - [ ] Verify the newly published no-new-billing release health and four-employee presentation without creating a task, payment, connector action, or external side effect.
 - [x] Replace stale public landing-page references to Sarah, David, Alex, and a three-person legacy crew with the approved four employee roles and safety boundary.
 - [x] Add a regression test that prevents legacy employees, unsupported connector claims, and fabricated live-performance metrics from returning to the public landing page.
+- [x] Allow general company-room messages while retaining owner-approved plan gates for role-specific work queueing.
 - [x] Document the deferred Cloud Run, Secret Manager, billing, and private Hermes requirements for the later full-runtime rollout.

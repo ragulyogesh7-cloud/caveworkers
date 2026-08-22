@@ -54,6 +54,8 @@ function seedTenants() {
   db.employeePlans.clear();
   db.employeeMemory.clear();
   db.conversations.clear();
+  db.workroomMessages.clear();
+  db.workroomMessagesLoaded.clear();
   pendingPaymentOrders.clear();
   workforceTestHooks?.resetRateLimits();
 
@@ -182,6 +184,22 @@ describe('Caveworkers current workforce and billing invariants', () => {
       await approvePlan(employee.id);
       await csrfRequest('user-a', 'post', `/api/employees/${employee.id}/conversation`).send({ message: `Prepare the approved ${employee.role} work.` }).expect(200);
     }
+  }, 30000);
+
+  it('allows a tenant-scoped company-room note without queueing role work, while a direct task remains plan-gated', async () => {
+    const response = await csrfRequest('user-a', 'post', '/api/workforce/workroom/messages').send({ message: 'Please keep the next discussion focused on evidence and approval requirements.' }).expect(201);
+    expect(response.body.queued).toBe(false);
+    expect(response.body.message.sender).toBe('Tenant A Owner');
+    expect(response.body.message.body).toContain('evidence and approval');
+
+    await request(app).get('/api/workforce/workroom').set('x-caveworkers-test-user', 'user-a').expect(200).then((snapshot) => {
+      expect(snapshot.body.messages).toHaveLength(1);
+      expect(snapshot.body.tasks).toHaveLength(0);
+    });
+    await request(app).get('/api/workforce/workroom').set('x-caveworkers-test-user', 'user-b').expect(200).then((snapshot) => {
+      expect(snapshot.body.messages).toHaveLength(0);
+    });
+    await csrfRequest('user-a', 'post', '/api/tasks').send({ request: 'Review the company security posture.', preferred_employee_id: 'cybersecurity_analyst' }).expect(409);
   }, 30000);
 
   it('keeps Security, Backend, and QA write-capable tools review-gated even when autopilot is requested', async () => {
