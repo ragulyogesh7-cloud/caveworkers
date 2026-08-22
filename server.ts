@@ -18,6 +18,10 @@ import { Sentry, anonymizeIdentifier, reportOperationalFailure, sentryEnabled } 
 import { isTrialExpired, verifyRazorpayPaymentSignature, verifyRazorpayWebhookSignature } from './security.js';
 import { getMcpRegistryServer, searchMcpRegistry } from './mcp-registry.js';
 import { CONNECTOR_DIRECTORY_CATEGORIES, CONNECTOR_DIRECTORY_COUNT, connectorDirectoryPublicView, getConnectorDirectoryEntry, searchConnectorDirectory } from './connector-directory.js';
+import { createHermesAgentRuntime } from './hermes-runtime.js';
+import { createCloudRunIdentityTokenProvider } from './hermes-cloud-run-auth.js';
+import { buildHermesInstructions, getHermesEmployeeContract } from './hermes-contracts.js';
+import { createHermesCapabilityBundle, redactHermesCapabilityTokens } from './hermes-capabilities.js';
 
 dotenv.config();
 
@@ -97,6 +101,18 @@ const WORKFLOW_SCHEDULER_POLL_MS = Math.min(Math.max(Number(process.env.WORKFLOW
 const SCHEDULER_TICK_SECRET = (process.env.SCHEDULER_TICK_SECRET || (IS_PRODUCTION ? '' : 'test-scheduler-secret')).trim();
 const TENANT_DELETION_GRACE_DAYS = Math.min(Math.max(Number(process.env.TENANT_DELETION_GRACE_DAYS || '14') || 14, 1), 30);
 const TENANT_EXPORT_EXPIRY_DAYS = Math.min(Math.max(Number(process.env.TENANT_EXPORT_EXPIRY_DAYS || '7') || 7, 1), 30);
+const HERMES_RUNTIME_AUDIENCE = (process.env.HERMES_CLOUD_RUN_AUDIENCE || '').trim();
+const HERMES_CAPABILITY_SIGNING_KEY = (process.env.HERMES_CAPABILITY_SIGNING_KEY || '').trim();
+const hermesRuntime = createHermesAgentRuntime(process.env, { identityTokenProvider: createCloudRunIdentityTokenProvider(HERMES_RUNTIME_AUDIENCE) });
+let hermesHealthCache: { checkedAt: number; ready: boolean; reason?: string } | null = null;
+
+async function getHermesRuntimeHealth() {
+  if (hermesRuntime.isEnabled() && HERMES_CAPABILITY_SIGNING_KEY.length < 32) return { checkedAt: Date.now(), ready: false, reason: 'Hermes capability signing is not configured.' };
+  if (hermesHealthCache && Date.now() - hermesHealthCache.checkedAt < 30_000) return hermesHealthCache;
+  const health = await hermesRuntime.health();
+  hermesHealthCache = { checkedAt: Date.now(), ready: health.ready, reason: health.reason };
+  return hermesHealthCache;
+}
 
 interface SpecialistModelConfig {
   model: string;
@@ -163,7 +179,7 @@ const EMPLOYEE_SPECIALIST_CONFIGS: Record<string, SpecialistModelConfig> = {
 
 type AnalystNarrativeResult = {
   text: string;
-  provider: 'openrouter' | 'gemini' | 'preview';
+  provider: 'openrouter' | 'gemini' | 'preview' | 'hermes';
   model?: string;
   latency_ms: number;
   usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; cost?: number };
@@ -309,6 +325,118 @@ async function generateWorkforceNarrative(prompt: string, tenantId: string, empl
   }
 
   return { text: '', provider: 'preview', latency_ms: Date.now() - startedAt, error_code: OPENROUTER_KEY_READY ? 'provider_unavailable' : 'model_not_configured' };
+}
+
+type HermesRoleRunOutcome = {
+  state: 'pending' | 'awaiting_approval' | 'completed' | 'failed';
+  answer?: string;
+  runtime: NonNullable<TaskRecord['agent_runtime']>;
+  reason?: string;
+  approvalId?: number;
+};
+
+async function ensureHermesRunApproval(companyId: string, taskId: number, employeeId: string, runId: string) {
+  await hydrateTenantApprovals(companyId);
+  const existing = Array.from(db.approvals.values()).find((approval) => approval.company_id === companyId && approval.task_id === taskId && approval.status === 'pending' && approval.payload?.origin === 'hermes_runtime' && approval.payload?.run_id === runId);
+  if (existing) return existing;
+  const approval: ApprovalRecord = {
+    id: db.nextApprovalId++,
+    company_id: companyId,
+    task_id: taskId,
+    employee_id: employeeId,
+    tool_name: 'Private Hermes runtime',
+    action_summary: 'The private runtime paused and requires a manager decision before it can continue. No external action or live payment has been performed.',
+    status: 'pending',
+    payload: { origin: 'hermes_runtime', action_type: 'hermes.run.approval', run_id: runId, execution_status: 'awaiting_approval' },
+    created_at: new Date().toISOString()
+  };
+  await persistApprovalRecord(approval);
+  await auditWorkforceAction({ company_id: companyId, actor_type: 'system', actor_id: 'hermes-runtime', action: 'hermes.run.approval_requested', resource_type: 'approval', resource_id: String(approval.id), task_id: taskId, risk: 'high', status: 'prepared', summary: approval.action_summary, correlation_id: `hermes:${runId}`, metadata: { employee_id: employeeId } });
+  return approval;
+}
+
+async function resolveHermesRunApproval(approval: ApprovalRecord) {
+  const runId = String(approval.payload?.run_id || '').trim();
+  if (!runId || !hermesRuntime.isEnabled()) throw new Error('The private Hermes runtime is not available to resolve this approval.');
+  const resolution = await hermesRuntime.resolveApproval(runId, approval.status === 'approved' ? 'approved' : 'rejected');
+  approval.payload = { ...(approval.payload || {}), execution_status: approval.status === 'approved' ? 'resumed' : 'cancelled', runtime_status: resolution.status, resolved_run_id: resolution.runId || runId };
+  await persistApprovalRecord(approval);
+  await hydrateTenantTasks(approval.company_id);
+  const task = db.tasks.get(approval.task_id);
+  if (task?.company_id === approval.company_id) {
+    task.agent_runtime = { ...(task.agent_runtime || { kind: 'hermes', employee_id: approval.employee_id, run_id: runId, session_id: resolution.sessionId, started_at: new Date().toISOString() }), run_id: resolution.runId || runId, session_id: resolution.sessionId || task.agent_runtime?.session_id || '', status: resolution.status, updated_at: new Date().toISOString() };
+    if (approval.status === 'approved') {
+      task.status = 'processing';
+      task.completed_at = undefined;
+      task.execution = { action_type: 'none', status: 'processing', summary: 'Manager approval recorded. The private runtime may continue its tenant-scoped role run; no external action is authorized.', updated_at: new Date().toISOString() };
+      task.trace = [...(task.trace || []), { kind: 'approval_resolved', sender: 'Manager', receiver: 'Private runtime', body: 'Manager approved the runtime continuation. Caveworkers resumed only the existing private run.', created_at: new Date().toISOString() }];
+    } else {
+      task.status = 'blocked';
+      task.completed_at = new Date().toISOString();
+      task.execution = { action_type: 'none', status: 'cancelled', summary: 'Manager declined the private runtime continuation. No external action was performed.', updated_at: new Date().toISOString() };
+      task.trace = [...(task.trace || []), { kind: 'approval_resolved', sender: 'Manager', receiver: 'Private runtime', body: 'Manager declined the runtime continuation. Caveworkers stopped the existing private run; no external action was performed.', created_at: new Date().toISOString() }];
+    }
+    await persistTaskRecord(task);
+    emitWorkroomEvent(task.company_id, task.id, { type: 'task_update', task: workroomSnapshot(task) });
+  }
+  const job = Array.from(db.workforceQueue.values()).find((candidate) => candidate.company_id === approval.company_id && candidate.task_id === approval.task_id);
+  if (job) {
+    job.status = approval.status === 'approved' ? 'queued' : 'completed';
+    job.claimed_by = undefined;
+    job.updated_at = new Date().toISOString();
+    await persistWorkforceJob(job);
+  }
+  await auditWorkforceAction({ company_id: approval.company_id, actor_type: 'user', actor_id: 'workspace-manager', action: approval.status === 'approved' ? 'hermes.run.approval_granted' : 'hermes.run.approval_rejected', resource_type: 'approval', resource_id: String(approval.id), task_id: approval.task_id, risk: 'high', status: approval.status === 'approved' ? 'approved' : 'blocked', summary: approval.status === 'approved' ? 'Manager resumed the existing private Hermes run. No external action is authorized.' : 'Manager cancelled the private Hermes run. No external action was performed.', correlation_id: `hermes:${runId}`, metadata: { employee_id: approval.employee_id, runtime_status: resolution.status } });
+  if (approval.status === 'approved' && ALWAYS_ON_WORKER_ENABLED) void processNextWorkforceJob();
+  return resolution;
+}
+
+async function advanceHermesRoleRun(input: { taskId: number; companyId: string; employeeId: string; prompt: string; systemPrompt: string; existing?: TaskRecord['agent_runtime'] }): Promise<HermesRoleRunOutcome | null> {
+  if (!hermesRuntime.isEnabled() || !getHermesEmployeeContract(input.employeeId)) return null;
+  const health = await getHermesRuntimeHealth();
+  if (!health.ready) return { state: 'failed', reason: health.reason || 'Hermes runtime is unavailable.', runtime: { kind: 'hermes', employee_id: input.employeeId, run_id: '', session_id: '', status: 'failed', started_at: new Date().toISOString(), updated_at: new Date().toISOString(), error_code: 'runtime_unavailable' } };
+
+  const startedAt = input.existing?.started_at || new Date().toISOString();
+  if (Date.now() - Date.parse(startedAt) > 180_000) {
+    return { state: 'failed', reason: 'Hermes run exceeded the configured safety timeout.', runtime: { ...(input.existing || { kind: 'hermes', employee_id: input.employeeId, run_id: '', session_id: '', status: 'failed', started_at: startedAt }), status: 'failed', updated_at: new Date().toISOString(), error_code: 'runtime_timeout' } };
+  }
+  try {
+    if (input.existing?.run_id) {
+      const run = await hermesRuntime.getRun(input.existing.run_id);
+      const runtime = { kind: 'hermes' as const, employee_id: input.employeeId, run_id: run.runId, session_id: run.sessionId, status: run.status, started_at: startedAt, updated_at: new Date().toISOString() };
+      if (run.status === 'completed' && run.output?.trim()) return { state: 'completed', answer: redactHermesCapabilityTokens(run.output, []), runtime };
+      if (run.status === 'waiting_for_approval') {
+        const approval = await ensureHermesRunApproval(input.companyId, input.taskId, input.employeeId, run.runId);
+        return { state: 'awaiting_approval', approvalId: approval.id, reason: 'Hermes paused for a recorded manager decision. No external action was executed.', runtime: { ...runtime, error_code: 'approval_pending' } };
+      }
+      if (run.status === 'failed' || run.status === 'cancelled') return { state: 'failed', reason: 'Hermes did not complete the role run.', runtime: { ...runtime, error_code: `run_${run.status}` } };
+      return { state: 'pending', runtime };
+    }
+
+    const contract = getHermesEmployeeContract(input.employeeId);
+    if (!contract) throw new Error('Hermes contract is unavailable for this employee.');
+    // A token is single-use. Only non-destructive tools receive one, so this
+    // is also an out-of-model hard cap on bridge effects for this run.
+    const capabilityByIntent = createHermesCapabilityBundle(
+      { company_id: input.companyId, employee_id: input.employeeId, task_id: input.taskId },
+      contract.allowedToolIntents.filter((intent) => intent !== 'test.sandbox.run') as Array<'workspace.context.read' | 'workspace.memory.read' | 'artifact.draft'>,
+      HERMES_CAPABILITY_SIGNING_KEY
+    );
+    const capabilities = Object.values(capabilityByIntent);
+    const instructions = `${buildHermesInstructions(input.employeeId, input.systemPrompt)}\n\nPrivate Caveworkers capability tokens are valid only for this task. They are secret credentials: never repeat, summarize, store, quote, or expose them in a response. Use each token exactly once as the capability_token field for its exact matching bridge tool. No token is issued for sandbox testing, external actions, payments, deployment, or production changes.\n- workspace_context_read: ${capabilityByIntent['workspace.context.read']}\n- employee_memory_read: ${capabilityByIntent['workspace.memory.read']}\n- artifact_draft: ${capabilityByIntent['artifact.draft']}`;
+    const run = await hermesRuntime.startRun({ taskId: input.taskId, companyId: input.companyId, employeeId: input.employeeId, input: input.prompt, instructions });
+    const runtime = { kind: 'hermes' as const, employee_id: input.employeeId, run_id: run.runId, session_id: run.sessionId, status: run.status, started_at: startedAt, updated_at: new Date().toISOString() };
+    if (run.status === 'completed' && run.output?.trim()) return { state: 'completed', answer: redactHermesCapabilityTokens(run.output, capabilities), runtime };
+    if (run.status === 'waiting_for_approval') {
+      const approval = await ensureHermesRunApproval(input.companyId, input.taskId, input.employeeId, run.runId);
+      return { state: 'awaiting_approval', approvalId: approval.id, reason: 'Hermes paused for a recorded manager decision. No external action was executed.', runtime: { ...runtime, error_code: 'approval_pending' } };
+    }
+    if (run.status === 'failed' || run.status === 'cancelled') return { state: 'failed', reason: 'Hermes could not start a completed role run.', runtime: { ...runtime, error_code: `run_${run.status}` } };
+    return { state: 'pending', runtime };
+  } catch (error: any) {
+    const reason = String(error?.message || 'Hermes request failed.').slice(0, 500);
+    return { state: 'failed', reason, runtime: { kind: 'hermes', employee_id: input.employeeId, run_id: input.existing?.run_id || '', session_id: input.existing?.session_id || '', status: 'failed', started_at: startedAt, updated_at: new Date().toISOString(), error_code: 'runtime_request_failed' } };
+  }
 }
 
 app.use((req, res, next) => {
@@ -713,6 +841,16 @@ interface TaskRecord {
     updated_at: string;
     result?: Record<string, string>;
   };
+  agent_runtime?: {
+    kind: 'hermes';
+    employee_id: string;
+    run_id: string;
+    session_id: string;
+    status: string;
+    started_at: string;
+    updated_at: string;
+    error_code?: string;
+  };
 }
 
 interface WorkforceLiveToolEvidence {
@@ -896,7 +1034,7 @@ interface AnalystRun {
   report: string;
   chart?: { title: string; labels: string[]; values: number[]; unit: string; source_note: string };
   approval_id?: number;
-  model?: { provider: 'openrouter' | 'gemini' | 'preview'; name?: string; latency_ms: number; usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; cost?: number }; error_code?: string };
+  model?: { provider: 'openrouter' | 'gemini' | 'preview' | 'hermes'; name?: string; latency_ms: number; usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; cost?: number }; error_code?: string };
   created_at: string;
 }
 
@@ -2220,6 +2358,16 @@ async function processNextWorkforceJob(force = false) {
       Object.assign(task, completed);
       task.status = completed.status || 'completed';
       task.started_at = task.started_at || new Date().toISOString();
+      if (task.status === 'processing' && task.agent_runtime?.kind === 'hermes') {
+        task.completed_at = undefined;
+        await persistTaskRecord(task);
+        job.status = 'queued';
+        job.claimed_by = undefined;
+        job.updated_at = new Date().toISOString();
+        await persistWorkforceJob(job);
+        emitWorkroomEvent(job.company_id, task.id, { type: 'task_update', task: workroomSnapshot(task) });
+        return;
+      }
       task.completed_at = new Date().toISOString();
       await persistTaskRecord(task);
       emitWorkroomTrace(job.company_id, task.id, task.trace || []);
@@ -3937,6 +4085,7 @@ app.get('/api/health', (_req, res) => {
       google_oauth: { status: GOOGLE_OAUTH_CONFIGURED ? 'configured' : 'unconfigured' },
       smtp: { status: SMTP_CONFIGURED ? 'configured' : 'unconfigured', host: SMTP_CONFIGURED ? SMTP_HOST : undefined, sender: SMTP_CONFIGURED ? COMPANY_EMAIL : undefined },
       mcp_bus: { status: 'active' },
+      hermes: { status: hermesRuntime.isEnabled() ? 'configured_pending_readiness' : 'disabled' },
       observability: { sentry: sentryEnabled ? 'configured' : 'unconfigured' }
     }
   });
@@ -4670,7 +4819,8 @@ app.get('/api/employees/:id/profile', async (req, res) => {
   const active = (db.orgEmployees.get(companyId) || []).find((entry) => entry.id === employee.id);
   const [connectors, memory] = await Promise.all([loadMcpConnections(companyId, employee.id), loadEmployeeMemory(companyId, employee.id)]);
   const teammates = (db.orgEmployees.get(companyId) || []).filter((entry) => entry.id !== employee.id).map((entry) => ({ id: entry.id, name: entry.name, role: entry.role, department: entry.department }));
-  res.json({ employee, active_in_workspace: Boolean(active), instance: active || null, connectors: connectors.map(connectorPublicView), memory, teammates });
+  const runtimeContract = getHermesEmployeeContract(employee.id);
+  res.json({ employee, active_in_workspace: Boolean(active), instance: active || null, connectors: connectors.map(connectorPublicView), memory, teammates, private_runtime: { configured: hermesRuntime.isEnabled(), status: hermesRuntime.isEnabled() ? (HERMES_CAPABILITY_SIGNING_KEY.length >= 32 ? 'configured_pending_readiness' : 'configuration_incomplete') : 'disabled', capability_scoped: Boolean(runtimeContract), external_actions: 'caveworkers_approval_only' } });
 });
 
 app.get('/api/employees/:id/memory', async (req, res) => {
@@ -5182,6 +5332,40 @@ async function handleTaskRoutingAsync(question: string, companyId: string, prefe
   const { manager, lead, collaborators, workforce } = selectCollaborativeTeam(question || 'Operations review', companyId, routedEmployeeId);
   const lowerQ = (question || '').toLowerCase();
   const executionTeam = [lead, ...collaborators].filter((employee, index, list) => list.findIndex((entry) => entry.id === employee.id) === index);
+  let hermesNarrative: AnalystNarrativeResult | null = null;
+  if (directEmployeeId && existingTask) {
+    const roleConfig = EMPLOYEE_SPECIALIST_CONFIGS[directEmployeeId];
+    if (roleConfig) {
+      const hermesOutcome = await advanceHermesRoleRun({
+        taskId,
+        companyId,
+        employeeId: directEmployeeId,
+        prompt: question,
+        systemPrompt: roleConfig.systemPrompt,
+        existing: existingTask.agent_runtime
+      });
+      if (hermesOutcome?.state === 'pending' || hermesOutcome?.state === 'awaiting_approval') {
+        const awaitingApproval = hermesOutcome.state === 'awaiting_approval';
+        const runtimeTask: TaskRecord = {
+          ...existingTask,
+          status: awaitingApproval ? 'pending_approval' : 'processing',
+          execution: { action_type: 'none', status: awaitingApproval ? 'awaiting_approval' : 'processing', summary: awaitingApproval ? 'The private runtime paused for a recorded manager decision. No external action is being executed.' : `${lead.name} is completing a private, tenant-scoped role run. No external action is being executed.`, updated_at: new Date().toISOString() },
+          agent_runtime: hermesOutcome.runtime,
+          trace: awaitingApproval ? [...(existingTask.trace || []), { kind: 'approval_required', sender: lead.name, receiver: 'Manager approval queue', sender_id: lead.id, receiver_id: 'manager', body: `Private runtime approval #${hermesOutcome.approvalId} is required before this role run can continue. No external action has been executed.`, created_at: new Date().toISOString() }] : existingTask.agent_runtime?.run_id ? existingTask.trace || [] : [...(existingTask.trace || []), { kind: 'worker_update', sender: lead.name, receiver: 'Company workroom', sender_id: lead.id, receiver_id: 'company-room', body: `${lead.name} is preparing a role-scoped response using the private agent runtime.`, created_at: new Date().toISOString() }]
+        };
+        db.tasks.set(taskId, runtimeTask);
+        await persistTaskRecord(runtimeTask);
+        return { id: taskId, company_id: companyId, question, status: runtimeTask.status, owner: existingTask.owner, direct_employee_id: directEmployeeId, participants: existingTask.participants, plan: existingTask.plan, answer: existingTask.answer, execution: runtimeTask.execution, trace: runtimeTask.trace, live_tool_evidence: existingTask.live_tool_evidence || [], web_research: existingTask.web_research || [], collaboration_summary: existingTask.collaboration_summary, workforce_size: workforce.length, agent_runtime: hermesOutcome.runtime };
+      }
+      if (hermesOutcome?.state === 'completed' && hermesOutcome.answer) {
+        hermesNarrative = { text: hermesOutcome.answer, provider: 'hermes', model: 'private-hermes-runtime', latency_ms: 0 };
+        existingTask.agent_runtime = hermesOutcome.runtime;
+      } else if (hermesOutcome?.state === 'failed') {
+        existingTask.agent_runtime = hermesOutcome.runtime;
+        existingTask.trace = [...(existingTask.trace || []), { kind: 'worker_update', sender: lead.name, receiver: 'Company workroom', sender_id: lead.id, receiver_id: 'company-room', body: 'The private runtime is unavailable for this run. Caveworkers is using the configured safe response fallback; no external action was executed.', created_at: new Date().toISOString() }];
+      }
+    }
+  }
   const specialistContexts = await Promise.all(executionTeam.map((employee) => loadWorkforceTaskContext(companyId, employee)));
   await Promise.all(specialistContexts.map(async (context) => {
     context.live_tool_evidence = await executeEmployeeReadTools(companyId, context.employee, question);
@@ -5236,7 +5420,7 @@ async function handleTaskRoutingAsync(question: string, companyId: string, prefe
   });
   const teamBrief = `Public research evidence:\n${webText}\n\n` + specialistContexts.map((context) => `${context.employee.name}: ${context.employee.role} — ${context.employee.persona}\nGranted tools: ${context.tools.join(', ') || 'none'}\nConnected tenant tools: ${context.connectors.join(', ') || 'none'}\nRole memory: ${context.memory.join(' | ') || 'none'}\nLive MCP evidence: ${context.live_tool_evidence.map((entry) => `${entry.tool_name} [${entry.status}] ${entry.summary.slice(0, 900)}`).join(' | ') || 'none'}`).join('\n\n');
   const deliveryTeam = [lead, ...collaborators].filter((employee, index, list) => list.findIndex((entry) => entry.id === employee.id) === index);
-  const narrative = await generateWorkforceNarrative(
+  const narrative = hermesNarrative || await generateWorkforceNarrative(
     `${directEmployeeId ? `Assigned Specialist: ${lead.name} (${lead.role})\nRespond directly to the manager as ${lead.name}.\n` : `Manager: ${manager.name} (${manager.role})\nDelivery lead: ${lead.name} (${lead.role})\n`}Task: "${question}"\n\nActive specialist evidence:\n${teamBrief}\n\nWorkspace knowledge:\n${knowText}\n\nWrite a concise workplace chat update for the manager. Use plain language and short paragraphs, not a report, checklist, Markdown headings, or a long preamble. Start with either the answer, a single precise question if required information is missing, or a single clear blocker. Then state what the team did, what is actually verified, and the next action. Mention the delivery lead and contributors naturally. Never invent an attachment, file, message body, link, recipient, tool call, or completed external action. Do not claim that an email, write, payment, publication, access change, or other external action happened unless execution evidence explicitly confirms it. Keep the update under 120 words unless the user asks for detail.`,
     companyId,
     directEmployeeId || lead.id
@@ -5294,7 +5478,7 @@ Next step: configure a valid OpenRouter or Gemini model key, then rerun this req
   }
   trace.push({ kind: 'completed', sender: lead.name, receiver: 'Task ledger', body: requiresApproval ? `Work product completed; execution state: ${execution.status}.` : 'Work product completed with a tenant-scoped audit trace.', created_at: new Date(Date.now() + 3600).toISOString() });
   const liveToolEvidence = specialistContexts.flatMap((context) => context.live_tool_evidence);
-  const taskRecord: TaskRecord = { id: taskId, company_id: companyId, question, owner: manager.id, direct_employee_id: directEmployeeId, status: execution.status === 'awaiting_approval' ? 'pending_approval' : execution.status === 'blocked' ? 'blocked' : 'completed', answer, plan: directEmployeeId ? `1. ${lead.name} direct response → 2. ${manager.name} oversight → 3. Permissioned evidence → 4. Approval-gated external execution when requested` : `1. ${manager.name} intake → 2. Delegate ${lead.name} → 3. Specialist delivery${collaborators.length ? ` (${collaborators.map((employee) => employee.name).join(', ')})` : ''} → 4. Permissioned evidence → 5. ${manager.name} response → 6. Approval-gated external execution when requested`, created_at: now, trace, participants: ['Manager', manager.name, ...deliveryTeam.map((employee) => employee.name).filter((name, index, list) => list.indexOf(name) === index)], collaboration_summary: `${directEmployeeId ? `${lead.name} responded directly with ${manager.name} overseeing` : `${manager.name} managed ${lead.name}${collaborators.length ? ` with ${collaborators.length} supporting specialist${collaborators.length === 1 ? '' : 's'}` : ''}`}.`, live_tool_evidence: liveToolEvidence, web_research: webResearch, queued_at: existingTask?.queued_at, started_at: existingTask?.started_at || now, completed_at: new Date().toISOString(), execution };
+  const taskRecord: TaskRecord = { id: taskId, company_id: companyId, question, owner: manager.id, direct_employee_id: directEmployeeId, status: execution.status === 'awaiting_approval' ? 'pending_approval' : execution.status === 'blocked' ? 'blocked' : 'completed', answer, plan: directEmployeeId ? `1. ${lead.name} direct response → 2. ${manager.name} oversight → 3. Permissioned evidence → 4. Approval-gated external execution when requested` : `1. ${manager.name} intake → 2. Delegate ${lead.name} → 3. Specialist delivery${collaborators.length ? ` (${collaborators.map((employee) => employee.name).join(', ')})` : ''} → 4. Permissioned evidence → 5. ${manager.name} response → 6. Approval-gated external execution when requested`, created_at: now, trace, participants: ['Manager', manager.name, ...deliveryTeam.map((employee) => employee.name).filter((name, index, list) => list.indexOf(name) === index)], collaboration_summary: `${directEmployeeId ? `${lead.name} responded directly with ${manager.name} overseeing` : `${manager.name} managed ${lead.name}${collaborators.length ? ` with ${collaborators.length} supporting specialist${collaborators.length === 1 ? '' : 's'}` : ''}`}.`, live_tool_evidence: liveToolEvidence, web_research: webResearch, queued_at: existingTask?.queued_at, started_at: existingTask?.started_at || now, completed_at: new Date().toISOString(), execution, agent_runtime: existingTask?.agent_runtime };
   db.tasks.set(taskId, taskRecord);
   await persistTaskRecord(taskRecord);
   if (autoExecuteAction && workforceApproval) {
@@ -5431,6 +5615,18 @@ app.post('/api/approvals/:id', async (req, res) => {
   if (approval.status !== 'pending') return res.status(409).json({ error: 'This approval has already been decided.', approval });
   approval.status = requestedStatus;
   approval.decided_at = new Date().toISOString();
+
+  if (approval.payload?.origin === 'hermes_runtime') {
+    try {
+      const runtime = await resolveHermesRunApproval(approval);
+      const summary = approval.status === 'approved' ? 'The exact private Hermes run was resumed. No external action is authorized.' : 'The private Hermes run was cancelled. No external action was performed.';
+      return res.json({ ok: true, approval, execution: { status: approval.status === 'approved' ? 'processing' : 'cancelled', summary, runtime: { status: runtime.status } } });
+    } catch (error: any) {
+      approval.payload = { ...(approval.payload || {}), execution_status: 'failed', execution_error: String(error?.message || 'Hermes approval resolution failed.').slice(0, 500) };
+      await persistApprovalRecord(approval);
+      return res.status(502).json({ error: 'The approval decision was recorded, but Caveworkers could not resolve the private Hermes run.', approval });
+    }
+  }
 
   if (approval.payload?.origin === 'analyst') {
     await persistAnalystApproval(approval);

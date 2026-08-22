@@ -4,13 +4,16 @@
   "type": "module",
   "scripts": {
     "dev": "tsx --import ./instrument.ts server.ts",
+    "dev:hermes-bridge": "tsx hermes-bridge.ts",
     "lint": "tsc --noEmit",
     "test": "vitest run",
     "build": "tsc -p tsconfig.build.json",
-    "start": "node --import ./dist/instrument.js dist/server.js"
+    "start": "node --import ./dist/instrument.js dist/server.js",
+    "start:hermes-bridge": "node dist/hermes-bridge.js"
   },
   "dependencies": {
     "@google/genai": "^2.16.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@sentry/node": "^10.70.0",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
@@ -18,9 +21,11 @@
     "ejs": "^3.1.10",
     "express": "^4.19.2",
     "firebase-admin": "^14.2.0",
+    "google-auth-library": "^9.15.1",
     "googleapis": "174.0.1",
     "nodemailer": "^9.0.5",
-    "razorpay": "^2.9.8"
+    "razorpay": "^2.9.8",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.7",

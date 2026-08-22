@@ -1,0 +1,9 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --file=hermes-bridge/Dockerfile
+      - --tag=asia-southeast1-docker.pkg.dev/$PROJECT_ID/caveworkers/hermes-bridge:$COMMIT_SHA
+      - .
+images:
+  - asia-southeast1-docker.pkg.dev/$PROJECT_ID/caveworkers/hermes-bridge:$COMMIT_SHA

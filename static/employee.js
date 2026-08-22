@@ -18,8 +18,9 @@
     const state = $('#employee-instance-state');
     const rail = $('#employee-status');
     const status = data.active_in_workspace ? 'Active in your workforce' : 'Catalog employee — activate in settings';
-    state.textContent = status;
-    rail.textContent = data.active_in_workspace ? 'Instance active' : 'Activation needed';
+    const runtime = data.private_runtime || {};
+    state.textContent = runtime.status === 'configured_pending_readiness' ? `${status} · Private runtime readying` : status;
+    rail.textContent = runtime.status === 'configured_pending_readiness' ? 'Private runtime configured' : data.active_in_workspace ? 'Instance active' : 'Activation needed';
     const connectors = data.connectors || [];
     $('#employee-connector-list').innerHTML = connectors.length ? connectors.map((connector) => {
       const grants = (connector.tool_grants || []).map((grant) => `<span class="employee-tool-grant">${escapeHtml(grant.name || grant.tool_name || 'tool')} · ${escapeHtml(grant.access_level || 'read')}</span>`).join(' ');
