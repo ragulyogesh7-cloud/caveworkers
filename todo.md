@@ -1,0 +1,21 @@
+# Project TODO
+
+- [x] Inspect the existing avatars, Razorpay integration, application stack, and repository conventions before modifying the workforce experience.
+- [x] Define a shared AI employee foundation for the four existing avatars, roles, skills, personas, availability, plan state, and implementation state.
+- [x] Add server-side OpenRouter configuration with validation, graceful provider-error handling, and no client-side credential exposure.
+- [x] Persist employee configurations, isolated workspace conversations, work history, approved agent context, detailed plans, evaluations, and owner approval records.
+- [x] Enforce that agents can prepare Razorpay payment recommendations or requests but cannot perform a live payment operation without an explicit recorded owner approval.
+- [x] Build an elegant owner-facing workforce overview showing all four employees, status, role, capabilities, and their next planning or implementation action.
+- [x] Build four separated employee workspaces that keep identity, prompts, conversations, and approved context isolated by employee.
+- [x] Build a mandatory structured pre-build plan for each employee covering responsibilities, skills and tool boundaries, voice/persona, OpenRouter model, prompts, memory, evaluations, and approval rules.
+- [x] Prepare Employee 1's detailed plan and present it for explicit owner approval before implementation.
+- [x] Implement and verify Employee 1 after plan approval.
+- [x] Prepare Employee 2's detailed plan and present it for explicit owner approval before implementation.
+- [x] Implement and verify Employee 2 after plan approval.
+- [x] Prepare Employee 3's detailed plan and present it for explicit owner approval before implementation.
+- [x] Implement and verify Employee 3 after plan approval.
+- [x] Prepare Employee 4's detailed plan and present it for explicit owner approval before implementation.
+- [x] Implement and verify Employee 4 after plan approval.
+- [x] Add and run tests for employee isolation, provider-failure handling, planning approvals, and Razorpay payment approval enforcement.
+- [x] Commit the completed implementation to the repository.
+- [ ] Manually review the authenticated owner experience at desktop and mobile breakpoints with a real workspace login.

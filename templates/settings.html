@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="/static/motion.css">
   <link rel="stylesheet" href="/static/ui-reimplementation.css">
   <link rel="stylesheet" href="/static/settings.css">
+  <link rel="stylesheet" href="/static/workforce.css">
 </head>
 <body class="command-body settings-body clean-settings-body">
   <div class="app-shell settings-app-shell clean-settings-shell">
@@ -42,9 +43,10 @@
         <div class="settings-layout clean-settings-layout">
           <nav class="settings-nav clean-settings-nav" aria-label="Settings sections">
             <button class="active" type="button" data-settings-tab="workspace"><span>01</span>Workspace</button>
-            <button type="button" data-settings-tab="team"><span>02</span>People</button>
-            <button type="button" data-settings-tab="integrations"><span>03</span>Tools</button>
-            <button type="button" data-settings-tab="billing"><span>04</span>Plan</button>
+            <button type="button" data-settings-tab="workforce"><span>02</span>Workforce</button>
+            <button type="button" data-settings-tab="team"><span>03</span>People</button>
+            <button type="button" data-settings-tab="integrations"><span>04</span>Tools</button>
+            <button type="button" data-settings-tab="billing"><span>05</span>Plan</button>
             <p>Only you control this workspace. Connected tools stay isolated, and each employee runs within the autonomy policy you choose.</p>
           </nav>
 
@@ -57,6 +59,12 @@
                 <div class="form-actions"><p>Saved only for this workspace.</p><button class="btn btn-primary" type="submit">Save changes</button></div>
               </form>
               <div class="security-overview clean-security-overview"><article><span class="security-icon">✓</span><div><b>Private by default</b><p>Your tasks, conversations, approvals, and tools are tenant-isolated.</p></div></article><article><span class="security-icon">↗</span><div><b>Policy before action</b><p>Employees run authorized work automatically; high-impact actions follow your chosen policy.</p></div></article></div>
+            </section>
+
+            <section class="settings-panel clean-settings-panel workforce-panel" data-settings-panel="workforce" id="workforce" hidden>
+              <header class="settings-panel-header"><div><p class="panel-kicker">WORKFORCE CONTROL</p><h2>Build the team with intention</h2><p>Each employee has a separate identity, workspace, memory boundary, and pre-build approval path.</p></div><span class="section-status secure">OWNER LED</span></header>
+              <div class="workforce-safety-note"><span class="safety-note-mark">✓</span><p><b>Payment boundary:</b> employees may prepare payment evidence or requests; only you can initiate a live Razorpay checkout after an explicit confirmation.</p></div>
+              <div class="workforce-overview-grid" id="workforce-overview-grid"><p class="empty-state-sm">Loading your four employee workspaces…</p></div>
             </section>
 
             <section class="settings-panel clean-settings-panel" data-settings-panel="team" id="team" hidden>

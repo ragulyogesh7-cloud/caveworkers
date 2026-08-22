@@ -1,0 +1,25 @@
+.prebuild-plan-card { margin-bottom:18px; }
+.plan-workspace-state { align-self:flex-start; padding:7px 9px; border:1px solid rgba(153,174,212,.16); border-radius:999px; color:#aebbd2; background:rgba(144,163,196,.08); font:500 .63rem/1 "DM Mono",monospace; letter-spacing:.08em; }
+.plan-workspace-state.draft { color:#ffd878; border-color:rgba(255,207,91,.24); background:rgba(255,197,71,.09); }
+.plan-workspace-state.approved,.plan-workspace-state.implemented { color:#89e6ba; border-color:rgba(94,220,166,.24); background:rgba(73,202,144,.09); }
+.plan-workspace-state.rejected { color:#ffa8b3; border-color:rgba(255,125,145,.22); background:rgba(255,104,130,.08); }
+.plan-model-summary { display:flex; flex-wrap:wrap; gap:9px; padding:11px 13px; margin:15px 0; border:1px solid rgba(154,181,231,.12); border-radius:13px; background:rgba(7,12,28,.42); }
+.plan-model-summary span { color:#aab8d1; font-size:.75rem; }
+.plan-model-summary b { color:#e6effd; font-weight:500; }
+.plan-field-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+.employee-plan-form label { display:grid; gap:7px; color:#dce7f9; font-size:.77rem; font-weight:600; }
+.employee-plan-form textarea { min-height:86px; resize:vertical; padding:10px; border:1px solid rgba(157,180,222,.16); border-radius:12px; color:#f0f6ff; background:rgba(7,12,27,.5); font:400 .78rem/1.45 "Space Grotesk",sans-serif; outline:none; }
+.employee-plan-form textarea:focus { border-color:#79dcff; box-shadow:0 0 0 3px rgba(121,220,255,.1); }
+.plan-form-footer,.plan-decision-row { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:14px; padding-top:14px; border-top:1px solid rgba(157,180,222,.12); }
+.plan-form-footer p,.plan-decision-row p { max-width:620px; margin:0; color:#aab8d1; font-size:.76rem; line-height:1.5; }
+.plan-decision-row > div { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+.plan-reject { color:#ffabb5; }
+.employee-conversation { display:flex; flex-direction:column; gap:10px; height:280px; margin:15px 0 12px; padding:13px; overflow-y:auto; border:1px solid rgba(157,180,222,.12); border-radius:14px; background:rgba(4,8,22,.34); }
+.employee-chat-message { max-width:88%; padding:10px 12px; border:1px solid rgba(157,180,222,.11); border-radius:13px 13px 13px 3px; background:rgba(28,42,77,.54); }
+.employee-chat-message.manager { align-self:flex-end; border-radius:13px 13px 3px 13px; background:rgba(15,77,103,.36); }
+.employee-chat-message span { display:block; margin-bottom:5px; color:#7fe0ff; font:500 .61rem/1 "DM Mono",monospace; letter-spacing:.08em; }
+.employee-chat-message.manager span { color:#8be6bd; }
+.employee-chat-message p { margin:0; color:#e3ecfa; white-space:pre-wrap; font-size:.81rem; line-height:1.5; }
+.employee-chat-message small { display:block; margin-top:7px; color:#7f90ae; font-size:.65rem; }
+@media (max-width: 900px) { .plan-field-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width: 620px) { .plan-field-grid { grid-template-columns:1fr; } .plan-form-footer,.plan-decision-row { align-items:stretch; flex-direction:column; } .plan-decision-row > div { justify-content:stretch; } .plan-decision-row button { flex:1; } .employee-conversation { height:260px; } }

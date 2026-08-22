@@ -2,6 +2,7 @@ const $ = (selector) => document.querySelector(selector);
 let employees = [];
 let billingState = null;
 let selectedRegistryServer = null;
+let workforceOverview = null;
 
 function safe(value) {
   const node = document.createElement('span');
@@ -32,7 +33,7 @@ async function requestJson(url, options) {
 }
 
 function activateTab(tab, writeHash = true) {
-  const valid = ['workspace', 'team', 'integrations', 'billing'];
+  const valid = ['workspace', 'workforce', 'team', 'integrations', 'billing'];
   const selected = valid.includes(tab) ? tab : 'workspace';
   document.querySelectorAll('[data-settings-tab]').forEach((button) => button.classList.toggle('active', button.dataset.settingsTab === selected));
   document.querySelectorAll('[data-settings-panel]').forEach((panel) => {
@@ -62,6 +63,25 @@ function renderEmployeeTools() {
     const highImpact = employee.high_impact_action_policy || 'review';
     return `<article class="employee-settings-card agent-card"><div class="employee-settings-top">${employeePortraitMarkup(employee, employee.name?.[0] || 'AI', 'settings-employee-dp')}<div><h4>${safe(employee.name)} <span>${safe(employee.role)}</span></h4><p>${safe(employee.department || 'AI workforce')} · ${safe(employee.description || 'Specialist AI employee')}</p></div><div class="employee-card-actions"><span class="agent-mode-badge ${autonomy}">${autonomy === 'autopilot' ? 'AUTOPILOT' : 'COPILOT'}</span><a class="mini-link" href="/employee/${encodeURIComponent(employee.id)}">Open room ↗</a><button class="mini-danger" type="button" data-action="remove-employee" data-employee-id="${safe(employee.id)}">Remove</button></div></div><div class="agent-policy-row"><label><span>Everyday work</span><select data-action="set-employee-autonomy" data-employee-id="${safe(employee.id)}" aria-label="${safe(employee.name)} everyday autonomy"><option value="autopilot" ${autonomy === 'autopilot' ? 'selected' : ''}>Run automatically</option><option value="copilot" ${autonomy === 'copilot' ? 'selected' : ''}>Ask me first</option></select></label><label><span>High-impact actions</span><select data-action="set-employee-impact-policy" data-employee-id="${safe(employee.id)}" aria-label="${safe(employee.name)} high impact policy"><option value="review" ${highImpact === 'review' ? 'selected' : ''}>Review required</option><option value="autopilot" ${highImpact === 'autopilot' ? 'selected' : ''}>Run automatically</option></select></label></div>${permissions.length ? `<div class="permission-chips tool-belt-chips">${permissions.map((permission) => `<span class="permission-chip"><b>${safe(permission.tool_name)}</b><em>${safe(permission.access_level)}</em><button type="button" aria-label="Revoke ${safe(permission.tool_name)}" data-action="revoke-direct-tool" data-employee-id="${safe(employee.id)}" data-tool-name="${safe(permission.tool_name)}">×</button></span>`).join('')}</div>` : '<p class="employee-empty">No direct tool grants yet. Connect an app below and assign its tool belt to this employee.</p>'}</article>`;
   }).join('') : '<p class="empty-state-sm">No employees are currently active in this workspace.</p>';
+}
+
+function planStatusLabel(status) {
+  return ({ not_started: 'PLAN NEEDED', draft: 'AWAITING REVIEW', approved: 'APPROVED', rejected: 'REVISION NEEDED', implemented: 'IMPLEMENTED' })[status] || 'PLAN NEEDED';
+}
+
+function renderWorkforceOverview() {
+  const container = $('#workforce-overview-grid');
+  if (!container) return;
+  const workforce = workforceOverview?.employees || [];
+  if (!workforce.length) {
+    container.innerHTML = '<p class="empty-state-sm">The employee roster could not be loaded.</p>';
+    return;
+  }
+  container.innerHTML = workforce.map((employee) => {
+    const plan = employee.plan || { status: 'not_started', ready_for_implementation: false };
+    const capabilities = (employee.capabilities || []).slice(0, 3);
+    return `<article class="workforce-overview-card" style="--employee-color:${safe(employee.color || '#7ee8ff')}"><div class="workforce-overview-top">${employeePortraitMarkup(employee, employee.name?.[0] || 'AI', 'workforce-employee-dp')}<div><p class="workforce-code">${safe(employee.employee_code || 'AI EMPLOYEE')}</p><h3>${safe(employee.name)}</h3><p>${safe(employee.role)}</p></div><span class="plan-state ${safe(plan.status)}">${safe(planStatusLabel(plan.status))}</span></div><div class="workforce-card-copy"><span class="availability-dot"></span>${safe(employee.availability || 'Available')} · ${safe(employee.department || 'AI workforce')}</div><div class="workforce-capabilities">${capabilities.map((capability) => `<span>${safe(capability)}</span>`).join('')}</div><div class="workforce-next"><div><small>NEXT STEP</small><b>${safe(employee.next_action || 'Create detailed plan')}</b></div><a class="btn btn-light workforce-open" href="/employee/${encodeURIComponent(employee.id)}#prebuild-plan">${plan.ready_for_implementation ? 'Open workspace' : 'Plan employee'} ↗</a></div></article>`;
+  }).join('');
 }
 
 function renderCatalog(catalog) {
@@ -204,10 +224,11 @@ async function connectRegistryServer(event) {
 async function loadData() {
   try {
     notify('');
-    const [employeesData, billing, catalog, company, marketplace] = await Promise.all([
-      requestJson('/api/employees'), requestJson('/api/billing'), requestJson('/api/employee-catalog'), requestJson('/api/company'), requestJson('/api/mcp/marketplace')
+    const [employeesData, billing, catalog, company, marketplace, workforce] = await Promise.all([
+      requestJson('/api/employees'), requestJson('/api/billing'), requestJson('/api/employee-catalog'), requestJson('/api/company'), requestJson('/api/mcp/marketplace'), requestJson('/api/workforce/overview')
     ]);
     employees = employeesData || [];
+    workforceOverview = workforce || null;
     populateEmployeeSelect('grant-emp-id');
     populateEmployeeSelect('custom-mcp-employee');
     populateEmployeeSelect('marketplace-employee');
@@ -216,6 +237,7 @@ async function loadData() {
     renderEmployeeTools();
     renderCatalog(catalog || []);
     renderBilling(billing || {});
+    renderWorkforceOverview();
     if (company) {
       $('#setting-company-name').value = company.name || '';
       $('#setting-industry').value = company.industry || '';
@@ -460,7 +482,7 @@ async function startUpgrade(tier) {
   try {
     notify('Preparing a secure checkout…');
     // Do not pre-apply a paid tier. The server applies it only after Razorpay signature verification.
-    const order = await requestJson('/api/create-order', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tier }) });
+    const order = await requestJson('/api/create-order', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tier, approval_context: 'owner_checkout' }) });
     if (typeof window.Razorpay === 'undefined') throw new Error('Secure checkout is unavailable. Refresh the page and try again.');
     const checkout = new window.Razorpay({
       key: order.key_id || window.RAZORPAY_KEY,

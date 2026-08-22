@@ -103,6 +103,7 @@ interface SpecialistModelConfig {
   fallbackModel: string;
   roleTitle: string;
   systemPrompt: string;
+  providerPreferences?: { allow_fallbacks?: boolean; require_parameters?: boolean; data_collection?: 'allow' | 'deny'; zdr?: boolean };
 }
 
 const EMPLOYEE_SPECIALIST_CONFIGS: Record<string, SpecialistModelConfig> = {
@@ -110,25 +111,29 @@ const EMPLOYEE_SPECIALIST_CONFIGS: Record<string, SpecialistModelConfig> = {
     model: 'google/gemini-3.1-pro-preview',
     fallbackModel: 'anthropic/claude-sonnet-5',
     roleTitle: 'Data Analyst',
-    systemPrompt: 'You are the Data Analyst at Caveworkers. You provide quantitative rigor, SQL queries, metric breakdowns, financial forecasts, and KPI dashboards. You speak directly to the user with evidence and precision.'
+    systemPrompt: `You are the Data Analyst at Caveworkers. You provide evidence-first quantitative analysis, safe read-only SQL drafts, metric definitions, KPI variance analysis, and scenario-based forecasts. Start with the decision-relevant finding, then state evidence, assumptions, limitations, and a clear next action. Never invent source data, tool results, external actions, citations, or certainty. Treat forecasts as scenarios, not commitments; do not provide tax, legal, investment, or accounting advice. Use only tenant-assigned tools and never write to a source system without a recorded human approval. You may prepare a payment recommendation or invoice-validation checklist, but you may never create, initiate, capture, refund, or claim a Razorpay payment. Only a signed-in owner can explicitly initiate live checkout. If data is missing, ask one precise question.`,
+    providerPreferences: { allow_fallbacks: true, require_parameters: true, data_collection: 'deny' }
   },
   cybersecurity_analyst: {
     model: 'anthropic/claude-sonnet-5',
     fallbackModel: 'google/gemini-3.1-pro-preview',
     roleTitle: 'Cybersecurity Analyst',
-    systemPrompt: 'You are the Cybersecurity Analyst at Caveworkers. You specialize in least-privilege access, SOC2/ISO compliance, vulnerability analysis, threat modeling, and zero-trust security controls.'
+    systemPrompt: `You are the Cybersecurity Analyst at Caveworkers. You are an evidence-led, least-privilege security decision-support specialist. Classify work as access/identity, incident, vulnerability, IT service, compliance, questionnaire, change control, or infrastructure risk. Start with severity and affected scope, then distinguish observed evidence from hypotheses, name missing evidence, propose the least-privilege reversible option, state rollback and verification, and identify the owner decision required. Never invent a security alert, scan result, control status, incident resolution, access change, patch, ticket update, or external communication. Do not expose secrets, bypass authorization, provide harmful evasion guidance, or run invasive work outside tenant-approved scope. All Cybersecurity Analyst write-capable actions require explicit human approval even if a connector is otherwise configured for autopilot. You may assess payment-flow or invoice-fraud risk, but may never create, initiate, capture, refund, alter, or claim a Razorpay payment. Only a signed-in owner can explicitly initiate live checkout.`,
+    providerPreferences: { allow_fallbacks: true, require_parameters: true, data_collection: 'deny' }
   },
   backend_developer: {
     model: 'openai/gpt-5.3-codex',
     fallbackModel: 'anthropic/claude-sonnet-5',
     roleTitle: 'Full Stack Backend Developer',
-    systemPrompt: 'You are the Full Stack Backend Developer at Caveworkers. You specialize in APIs, database architectures, CI/CD, backend services, debugging, and repository operations. Answer directly with technical precision.'
+    systemPrompt: `You are the Full Stack Backend Developer at Caveworkers. You classify work as a bug, feature, incident, architecture, release, performance, migration, or infrastructure request. Start with the classification and affected components, then distinguish verified repository evidence from assumptions, propose the smallest reversible change, state risk, rollback, validation, and required approval. Design APIs with validation, authorization, error handling, idempotency, and observability. Treat database changes as forward migration plus rollback and compatibility work. Never invent a commit, pull request, issue update, test result, migration, deployment, CI run, provider action, or external outcome. Repository writes, schema migration execution, deployment, secret/environment changes, access-control changes, CI/CD changes, and external communication require explicit human approval. Never reveal credentials, run hidden commands, bypass authorization, or perform a live Razorpay payment operation. You may design payment integration, validation, and webhook controls only; a signed-in owner alone can explicitly initiate live Razorpay checkout.`,
+    providerPreferences: { allow_fallbacks: true, require_parameters: true, data_collection: 'deny' }
   },
   qa_engineer: {
     model: 'anthropic/claude-sonnet-5',
     fallbackModel: 'google/gemini-3.7-flash',
-    roleTitle: 'Software QA/Automation Engineer',
-    systemPrompt: 'You are the Software QA/Automation Engineer at Caveworkers. You specialize in test suites, end-to-end automation, bug reproduction, edge cases, regression testing, and code quality verification.'
+    roleTitle: 'Software QA / Automation Engineer',
+    systemPrompt: `You are the Software QA and Automation Engineer at Caveworkers. You are a precise, neutral, evidence-led verification specialist. Begin by identifying the system under test, environment, revision, expected behavior, critical journey, risk, available evidence, and approval need. Convert requirements into observable acceptance criteria across happy path, validation, authorization, failure, edge, regression, and compatibility risks. Use deterministic, isolated, non-destructive test paths and label every conclusion as a plan, verified execution result, observation, defect, or release recommendation. Never invent a test run, pass/fail result, log, screenshot, release state, provider action, or external outcome. Do not execute destructive or production tests, deploy software, change test/production data, send external communications, expose credentials, or bypass authentication. Test payment flows only in an explicitly approved test or sandbox context; never create a live Razorpay order, open live checkout, capture/refund payment, or claim payment success. A signed-in owner alone can initiate live checkout after explicit confirmation and server-side verification.`,
+    providerPreferences: { allow_fallbacks: true, require_parameters: true, data_collection: 'deny' }
   },
   david: {
     model: 'google/gemini-3.1-pro-preview',
@@ -247,6 +252,7 @@ async function generateWorkforceNarrative(prompt: string, tenantId: string, empl
           temperature: 0.2,
           max_tokens: Math.min(1400, ANALYST_MAX_TOKENS + 350),
           stream: false,
+          provider: config.providerPreferences,
           user: crypto.createHash('sha256').update(tenantId).digest('hex').slice(0, 32),
           messages: [
             { role: 'system', content: config.systemPrompt },
@@ -405,7 +411,9 @@ try {
 
 const targetDbId = appletConfig.firestoreDatabaseId || process.env.FIRESTORE_DATABASE_ID;
 const firebaseAuth = getApps().length ? getAuth() : null;
-const firestoreDb = getApps().length ? (targetDbId ? getFirestore(getApps()[0], targetDbId) : getFirestore()) : null;
+const firestoreDb = process.env.VITEST === 'true' || process.env.NODE_ENV === 'test'
+  ? null
+  : (getApps().length ? (targetDbId ? getFirestore(getApps()[0], targetDbId) : getFirestore()) : null);
 const SESSION_COOKIE_MAX_AGE = Math.min(Math.max(Number(process.env.SESSION_COOKIE_MAX_AGE_MS || 30 * 24 * 60 * 60 * 1000) || 30 * 24 * 60 * 60 * 1000, 24 * 60 * 60 * 1000), 90 * 24 * 60 * 60 * 1000);
 const cookieSecure = process.env.COOKIE_SECURE === 'true' || process.env.CAVEWORKERS_ENV === 'production';
 const sessionCookieOptions = { httpOnly: true, secure: cookieSecure, sameSite: 'lax' as const, path: '/', maxAge: SESSION_COOKIE_MAX_AGE };
@@ -437,9 +445,9 @@ function verifySessionPayload(token: string): { uid: string; email: string; exp:
 }
 
 // Razorpay Setup
-const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || 'rzp_live_TSl5lFaL2uh4d1';
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || 'pSnoTLxRfrQX8Pg7mdKk3VTr';
-const RAZORPAY_WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET || 'rzp_webhook_secret_live';
+const RAZORPAY_KEY_ID = (process.env.RAZORPAY_KEY_ID || '').trim();
+const RAZORPAY_KEY_SECRET = (process.env.RAZORPAY_KEY_SECRET || '').trim();
+const RAZORPAY_WEBHOOK_SECRET = (process.env.RAZORPAY_WEBHOOK_SECRET || '').trim();
 if (IS_PRODUCTION && (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET || !RAZORPAY_WEBHOOK_SECRET)) {
   throw new Error('RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, and RAZORPAY_WEBHOOK_SECRET are required in production.');
 }
@@ -572,6 +580,15 @@ const EMPLOYEE_CATALOG = [
     status: 'active'
   }
 ];
+
+function defaultEmployeeToolAccess(employeeId: string, toolName: string): 'read_only' | 'requires_approval' | 'read_write' {
+  const normalizedTool = toolName.toLowerCase();
+  if (employeeId === 'cybersecurity_analyst') return 'requires_approval';
+  if (employeeId === 'data_analyst') return normalizedTool.includes('mail') ? 'requires_approval' : 'read_only';
+  if (employeeId === 'backend_developer') return 'requires_approval';
+  if (employeeId === 'qa_engineer') return 'requires_approval';
+  return (normalizedTool.includes('mail') || normalizedTool.includes('github') || normalizedTool.includes('identity') || normalizedTool.includes('terminal')) ? 'requires_approval' : 'read_write';
+}
 
 // In-Memory Database
 interface User {
@@ -874,6 +891,23 @@ interface AnalystRun {
   created_at: string;
 }
 
+type EmployeePlanStatus = 'not_started' | 'draft' | 'approved' | 'rejected' | 'implemented';
+type EmployeePlanSectionKey = 'responsibilities' | 'skill_boundaries' | 'tool_boundaries' | 'voice_persona' | 'model_strategy' | 'prompting' | 'memory_policy' | 'evaluation_cases' | 'approval_rules';
+
+interface EmployeePrebuildPlan {
+  id: string;
+  company_id: string;
+  employee_id: string;
+  version: number;
+  status: EmployeePlanStatus;
+  sections: Record<EmployeePlanSectionKey, string[]>;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  approved_by?: string;
+  approved_at?: string;
+}
+
 const db = {
   users: new Map<string, User>(),
   companies: new Map<string, Company>(),
@@ -896,6 +930,7 @@ const db = {
   analystApprovalsLoaded: new Set<string>(),
   approvalTenantsLoaded: new Set<string>(),
   employeeMemory: new Map<string, EmployeeMemory[]>(),
+  employeePlans: new Map<string, EmployeePrebuildPlan>(),
   taskTenantsLoaded: new Set<string>(),
   workforceQueue: new Map<string, WorkforceQueueJob>(),
   employeePresence: new Map<string, { employee_id: string; status: 'idle' | 'working' | 'offline'; task_id?: number; last_seen_at: string }>(),
@@ -1015,6 +1050,46 @@ function employeeCollection(companyId: string) {
 
 function conversationCollection(companyId: string) {
   return analystTenantCollection(companyId, 'conversations');
+}
+
+function employeePlanCollection(companyId: string) {
+  return analystTenantCollection(companyId, 'employee_prebuild_plans');
+}
+
+function employeePlanKey(companyId: string, employeeId: string) {
+  return `${companyId}:${employeeId}`;
+}
+
+async function loadEmployeePrebuildPlan(companyId: string, employeeId: string): Promise<EmployeePrebuildPlan | null> {
+  const key = employeePlanKey(companyId, employeeId);
+  const cached = db.employeePlans.get(key);
+  if (cached) return cached;
+  const collection = employeePlanCollection(companyId);
+  if (!collection) return null;
+  try {
+    const snapshot = await collection.doc(employeeId).get();
+    if (!snapshot.exists) return null;
+    const plan = snapshot.data() as EmployeePrebuildPlan;
+    if (plan?.company_id === companyId && plan?.employee_id === employeeId) {
+      db.employeePlans.set(key, plan);
+      return plan;
+    }
+  } catch (error) {
+    reportOperationalFailure('employee.plan_load', error, { tenant_hash: anonymizeIdentifier(companyId), employee_id: employeeId });
+  }
+  return null;
+}
+
+async function persistEmployeePrebuildPlan(plan: EmployeePrebuildPlan) {
+  db.employeePlans.set(employeePlanKey(plan.company_id, plan.employee_id), plan);
+  const collection = employeePlanCollection(plan.company_id);
+  if (!collection) return;
+  try {
+    await collection.doc(plan.employee_id).set(stripUndefined(plan), { merge: true });
+  } catch (error) {
+    reportOperationalFailure('employee.plan_persist', error, { tenant_hash: anonymizeIdentifier(plan.company_id), employee_id: plan.employee_id });
+    throw new Error('The employee plan could not be saved safely.');
+  }
 }
 
 async function loadEmployeeConversation(companyId: string, employeeId: string, employeeName: string): Promise<any[]> {
@@ -1998,6 +2073,20 @@ function directEmployeeIdForQuestion(question: string, companyId: string, prefer
   })?.id;
 }
 
+async function assertEmployeePlanReadyForRoleWork(companyId: string, employeeId?: string) {
+  if (!employeeId || employeeId === '__whole_team__') return;
+  const employee = EMPLOYEE_CATALOG.find((entry) => entry.id === employeeId);
+  if (!employee) return;
+  const plan = await loadEmployeePrebuildPlan(companyId, employeeId);
+  if (plan?.status === 'approved' || plan?.status === 'implemented') return;
+  const error = Object.assign(new Error(`A detailed pre-build plan for ${employee.name} must be owner-approved before role-specific work can be queued.`), {
+    code: 'employee_plan_not_approved',
+    employee_id: employeeId,
+    plan: planPublicSummary(plan)
+  });
+  throw error;
+}
+
 async function enqueueWorkforceTask(companyId: string, question: string, preferredEmployeeId?: string, emailEmployeeId?: string, idempotencyKey?: string) {
   await loadOrgEmployees(companyId);
   await hydrateTenantTasks(companyId);
@@ -2013,6 +2102,7 @@ async function enqueueWorkforceTask(companyId: string, question: string, preferr
   const taskId = db.nextTaskId++;
   const now = new Date().toISOString();
   const routedEmployeeId = directEmployeeIdForQuestion(question || 'Operations review', companyId, preferredEmployeeId) || (preferredEmployeeId === '__whole_team__' ? '__whole_team__' : undefined);
+  await assertEmployeePlanReadyForRoleWork(companyId, routedEmployeeId);
   const validEmailEmployeeId = typeof emailEmployeeId === 'string' && activeWorkforce(companyId).some((employee) => employee.id === emailEmployeeId) ? emailEmployeeId : undefined;
   const { manager, lead, collaborators } = selectCollaborativeTeam(question || 'Operations review', companyId, routedEmployeeId);
   const isDirect = Boolean(routedEmployeeId && routedEmployeeId !== '__whole_team__');
@@ -2293,9 +2383,18 @@ function employeeAutonomyPolicy(companyId: string, employeeId: string) {
   };
 }
 
+function approvalLockedEmployee(employeeId: string) {
+  return employeeId === 'cybersecurity_analyst' || employeeId === 'backend_developer' || employeeId === 'qa_engineer';
+}
+
+function effectiveToolAccess(employeeId: string, requested: 'read_only' | 'requires_approval' | 'read_write') {
+  return approvalLockedEmployee(employeeId) && requested === 'read_write' ? 'requires_approval' : requested;
+}
+
 async function autonomousActionAllowed(companyId: string, payload: any) {
   const employeeId = String(payload?.employee_id || '');
   if (!employeeId) return false;
+  if (approvalLockedEmployee(employeeId)) return false;
   const policy = employeeAutonomyPolicy(companyId, employeeId);
   if (policy.autonomy_mode !== 'autopilot') return false;
   const connections = await loadMcpConnections(companyId, employeeId);
@@ -4168,7 +4267,7 @@ app.post('/api/onboarding/select-employees', async (req, res) => {
             avatar_url: cat.avatar_url,
             status: 'active',
             tools: [...cat.default_tools],
-            permissions: cat.default_tools.map((t) => ({ tool_name: t, access_level: t === 'Gmail' ? 'requires_approval' : 'read_write' })),
+            permissions: cat.default_tools.map((t) => ({ tool_name: t, access_level: defaultEmployeeToolAccess(cat.id, t) })),
             autonomy_mode: 'autopilot',
             high_impact_action_policy: 'review',
             connector_policy: 'assigned_only'
@@ -4277,11 +4376,160 @@ app.get('/api/employee-catalog', (_req, res) => {
   res.json(EMPLOYEE_CATALOG);
 });
 
+const EMPLOYEE_PLAN_SECTION_KEYS: EmployeePlanSectionKey[] = ['responsibilities', 'skill_boundaries', 'tool_boundaries', 'voice_persona', 'model_strategy', 'prompting', 'memory_policy', 'evaluation_cases', 'approval_rules'];
+
+function employeePlanBlueprint(employee: any) {
+  const config = EMPLOYEE_SPECIALIST_CONFIGS[employee.id] || EMPLOYEE_SPECIALIST_CONFIGS.data_analyst;
+  return {
+    employee: {
+      id: employee.id,
+      name: employee.name,
+      role: employee.role,
+      avatar_url: employee.avatar_url,
+      color: employee.color,
+      default_tools: employee.default_tools
+    },
+    required_sections: EMPLOYEE_PLAN_SECTION_KEYS,
+    recommended_model: { primary: config.model, fallback: config.fallbackModel, temperature: 0.2 },
+    guidance: {
+      purpose: 'A plan must define what this employee is responsible for, what it must refuse or escalate, and how its work will be evaluated before the workspace is enabled for role-specific implementation.',
+      payment_rule: 'Any Razorpay payment operation remains owner-initiated and requires an explicit human confirmation. The employee may only prepare evidence, recommendations, or a payment request.'
+    }
+  };
+}
+
+function normalizePlanSections(value: unknown): { sections?: Record<EmployeePlanSectionKey, string[]>; missing: EmployeePlanSectionKey[] } {
+  const candidate = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const sections = {} as Record<EmployeePlanSectionKey, string[]>;
+  const missing: EmployeePlanSectionKey[] = [];
+  for (const key of EMPLOYEE_PLAN_SECTION_KEYS) {
+    const raw = candidate[key];
+    const entries = Array.isArray(raw)
+      ? raw.map((entry) => String(entry || '').trim()).filter(Boolean).slice(0, 12)
+      : typeof raw === 'string' && raw.trim() ? [raw.trim()] : [];
+    if (!entries.length) missing.push(key);
+    sections[key] = entries.map((entry) => entry.slice(0, 1200));
+  }
+  return { sections, missing };
+}
+
+function planPublicSummary(plan: EmployeePrebuildPlan | null) {
+  return plan ? {
+    status: plan.status,
+    version: plan.version,
+    updated_at: plan.updated_at,
+    approved_at: plan.approved_at || null,
+    ready_for_implementation: plan.status === 'approved' || plan.status === 'implemented'
+  } : {
+    status: 'not_started' as const,
+    version: 0,
+    updated_at: null,
+    approved_at: null,
+    ready_for_implementation: false
+  };
+}
+
+app.get('/api/workforce/overview', async (req, res) => {
+  const user = getAuthUser(req);
+  const companyId = getTenantIdOrFail(req, res);
+  if (!user || !companyId) return;
+  const instances = await loadOrgEmployees(companyId);
+  const instanceById = new Map(instances.map((entry) => [entry.id, entry]));
+  const employees = await Promise.all(EMPLOYEE_CATALOG.map(async (employee) => {
+    const plan = await loadEmployeePrebuildPlan(companyId, employee.id);
+    const instance = instanceById.get(employee.id);
+    return {
+      id: employee.id,
+      employee_code: employee.employee_code,
+      name: employee.name,
+      role: employee.role,
+      department: employee.department,
+      color: employee.color,
+      avatar_url: employee.avatar_url,
+      status: instance?.status || 'active',
+      availability: instance?.status === 'active' ? 'Available' : 'Inactive',
+      capabilities: employee.default_tools,
+      plan: planPublicSummary(plan),
+      next_action: plan?.status === 'approved' || plan?.status === 'implemented'
+        ? 'Ready for controlled implementation'
+        : plan?.status === 'draft'
+          ? 'Review detailed plan'
+          : 'Create detailed plan'
+    };
+  }));
+  res.set('Cache-Control', 'private, no-store');
+  res.json({ employees, payment_policy: 'Agents cannot create or execute live Razorpay payment operations. Only the signed-in owner can initiate checkout after an explicit confirmation.', generated_at: new Date().toISOString() });
+});
+
 app.get('/api/employees', async (req, res) => {
   const user = getAuthUser(req);
   const companyId = getUserWorkspaceId(user);
   const emps = await loadOrgEmployees(companyId);
   res.json(emps);
+});
+
+app.get('/api/employees/:id/prebuild-plan', async (req, res) => {
+  const user = getAuthUser(req);
+  const companyId = getTenantIdOrFail(req, res);
+  if (!user || !companyId) return;
+  const employee = EMPLOYEE_CATALOG.find((entry) => entry.id === req.params.id);
+  if (!employee) return res.status(404).json({ error: 'Employee not found.' });
+  const plan = await loadEmployeePrebuildPlan(companyId, employee.id);
+  res.set('Cache-Control', 'private, no-store');
+  res.json({ ...employeePlanBlueprint(employee), plan, summary: planPublicSummary(plan) });
+});
+
+app.post('/api/employees/:id/prebuild-plan', async (req, res) => {
+  const user = getAuthUser(req);
+  const companyId = getTenantIdOrFail(req, res);
+  if (!user || !companyId) return;
+  if (await enforceWorkspaceAccess(req, res)) return;
+  if (!requireWorkspaceRole(req, res, 'admin')) return;
+  const employee = EMPLOYEE_CATALOG.find((entry) => entry.id === req.params.id);
+  if (!employee) return res.status(404).json({ error: 'Employee not found.' });
+  const normalized = normalizePlanSections(req.body?.sections);
+  if (normalized.missing.length) return res.status(400).json({ error: `Complete every mandatory plan section before saving: ${normalized.missing.join(', ')}.`, missing_sections: normalized.missing });
+  const current = await loadEmployeePrebuildPlan(companyId, employee.id);
+  const now = new Date().toISOString();
+  const plan: EmployeePrebuildPlan = {
+    id: current?.id || `plan_${crypto.randomBytes(8).toString('hex')}`,
+    company_id: companyId,
+    employee_id: employee.id,
+    version: (current?.version || 0) + 1,
+    status: 'draft',
+    sections: normalized.sections!,
+    created_by: current?.created_by || user.uid,
+    created_at: current?.created_at || now,
+    updated_at: now
+  };
+  await persistEmployeePrebuildPlan(plan);
+  await persistActivityLog(companyId, { id: Date.now(), sender: user.display_name || 'Owner', receiver: employee.name, kind: 'employee.prebuild_plan_saved', body: `Saved version ${plan.version} of ${employee.name}'s detailed pre-build plan. Implementation remains blocked until the owner approves it.`, created_at: now });
+  res.status(201).json({ ok: true, plan, summary: planPublicSummary(plan) });
+});
+
+app.post('/api/employees/:id/prebuild-plan/decision', async (req, res) => {
+  const user = getAuthUser(req);
+  const companyId = getTenantIdOrFail(req, res);
+  if (!user || !companyId) return;
+  if (await enforceWorkspaceAccess(req, res)) return;
+  if (!requireWorkspaceRole(req, res, 'admin')) return;
+  const employee = EMPLOYEE_CATALOG.find((entry) => entry.id === req.params.id);
+  if (!employee) return res.status(404).json({ error: 'Employee not found.' });
+  const decision = req.body?.decision;
+  if (decision !== 'approved' && decision !== 'rejected') return res.status(400).json({ error: 'Choose approved or rejected.' });
+  const plan = await loadEmployeePrebuildPlan(companyId, employee.id);
+  if (!plan) return res.status(409).json({ error: 'Create the detailed pre-build plan before deciding on it.' });
+  if (plan.status !== 'draft') return res.status(409).json({ error: 'Only a draft plan can be approved or rejected.', plan: planPublicSummary(plan) });
+  const now = new Date().toISOString();
+  plan.status = decision;
+  plan.updated_at = now;
+  if (decision === 'approved') {
+    plan.approved_by = user.uid;
+    plan.approved_at = now;
+  }
+  await persistEmployeePrebuildPlan(plan);
+  await persistActivityLog(companyId, { id: Date.now(), sender: user.display_name || 'Owner', receiver: employee.name, kind: `employee.prebuild_plan_${decision}`, body: `${decision === 'approved' ? 'Approved' : 'Rejected'} version ${plan.version} of ${employee.name}'s pre-build plan. ${decision === 'approved' ? 'The workspace is now eligible for controlled implementation.' : 'Implementation remains blocked.'}`, created_at: now });
+  res.json({ ok: true, plan, summary: planPublicSummary(plan) });
 });
 
 app.post('/api/employees/configure', async (req, res) => {
@@ -4309,7 +4557,7 @@ app.post('/api/employees/configure', async (req, res) => {
         color: cat.color,
         status: 'active',
         tools: [...cat.default_tools],
-        permissions: cat.default_tools.map((t) => ({ tool_name: t, access_level: t === 'Gmail' ? 'requires_approval' : 'read_write' })),
+        permissions: cat.default_tools.map((t) => ({ tool_name: t, access_level: defaultEmployeeToolAccess(cat.id, t) })),
         autonomy_mode: 'autopilot',
         high_impact_action_policy: 'review',
         connector_policy: 'assigned_only'
@@ -4332,7 +4580,9 @@ app.patch('/api/employees/:id/autonomy', async (req, res) => {
   const employee = emps.find((entry) => entry.id === req.params.id);
   if (!employee) return res.status(404).json({ error: 'Employee not found.' });
   const autonomyMode = req.body?.autonomy_mode === 'copilot' ? 'copilot' : req.body?.autonomy_mode === 'autopilot' ? 'autopilot' : employee.autonomy_mode || 'autopilot';
-  const highImpactPolicy = req.body?.high_impact_action_policy === 'autopilot' ? 'autopilot' : req.body?.high_impact_action_policy === 'review' ? 'review' : employee.high_impact_action_policy || 'review';
+  const highImpactPolicy = approvalLockedEmployee(employee.id)
+    ? 'review'
+    : (req.body?.high_impact_action_policy === 'autopilot' ? 'autopilot' : req.body?.high_impact_action_policy === 'review' ? 'review' : employee.high_impact_action_policy || 'review');
   const connectorPolicy = req.body?.connector_policy === 'workspace_shared' ? 'workspace_shared' : 'assigned_only';
   employee.autonomy_mode = autonomyMode;
   employee.high_impact_action_policy = highImpactPolicy;
@@ -4362,11 +4612,13 @@ app.post('/api/employees/:id/tools', async (req, res) => {
     emp.tools = (emp.tools || []).filter((t) => t.toLowerCase() !== tool_name.toLowerCase());
   } else {
     emp.permissions = emp.permissions || [];
+    const requestedAccess = ['read_only', 'requires_approval', 'read_write'].includes(access_level) ? access_level : 'read_write';
+    const effectiveAccess = effectiveToolAccess(empId, requestedAccess);
     const existing = emp.permissions.find((p) => p.tool_name.toLowerCase() === tool_name.toLowerCase());
     if (existing) {
-      existing.access_level = access_level || 'read_write';
+      existing.access_level = effectiveAccess;
     } else {
-      emp.permissions.push({ tool_name, access_level: access_level || 'read_write' });
+      emp.permissions.push({ tool_name, access_level: effectiveAccess });
       if (!emp.tools.includes(tool_name)) emp.tools.push(tool_name);
     }
   }
@@ -4384,15 +4636,16 @@ app.patch('/api/employees/:id/mcp-connections/:connectionId/autonomy', async (re
   const connections = await loadMcpConnections(companyId, employeeId);
   const connection = connections.find((entry) => entry.id === connectionId);
   if (!connection) return res.status(404).json({ error: 'Connector not found for this employee.' });
-  if (req.body?.autonomy_mode !== undefined) connection.autonomy_mode = req.body.autonomy_mode === 'copilot' ? 'copilot' : 'autopilot';
+  if (req.body?.autonomy_mode !== undefined) connection.autonomy_mode = approvalLockedEmployee(employeeId) ? 'copilot' : (req.body.autonomy_mode === 'copilot' ? 'copilot' : 'autopilot');
   if (typeof req.body?.tool_name === 'string' && req.body.tool_name.trim()) {
     const toolName = req.body.tool_name.trim().slice(0, 160);
     const tool = (connection.discovered_tools || []).find((entry) => entry.name === toolName);
     if (!tool) return res.status(404).json({ error: 'Tool was not discovered on this connector.' });
     const requestedAccess = ['read_only', 'requires_approval', 'read_write'].includes(req.body?.access_level) ? req.body.access_level : 'read_only';
+    const effectiveAccess = effectiveToolAccess(employeeId, requestedAccess);
     const existing = (connection.tool_grants || []).find((entry) => entry.tool_name === toolName);
-    if (existing) existing.access_level = requestedAccess;
-    else connection.tool_grants = [...(connection.tool_grants || []), { tool_name: toolName, access_level: requestedAccess }];
+    if (existing) existing.access_level = effectiveAccess;
+    else connection.tool_grants = [...(connection.tool_grants || []), { tool_name: toolName, access_level: effectiveAccess }];
   }
   connection.updated_at = new Date().toISOString();
   await persistMcpConnection(connection);
@@ -4481,6 +4734,7 @@ app.post('/api/workforce/workroom', async (req, res) => {
     res.status(202).json(result);
   } catch (error: any) {
     if (error?.code === 'task_quota_exceeded') return res.status(402).json({ error: error.message, code: error.code, limit: error.limit, usage: error.usage });
+    if (error?.code === 'employee_plan_not_approved') return res.status(409).json({ error: error.message, code: error.code, employee_id: error.employee_id, plan: error.plan });
     reportOperationalFailure('task.enqueue', error, { tenant_hash: anonymizeIdentifier(companyId) });
     return res.status(500).json({ error: 'The task could not be queued safely.' });
   }
@@ -4535,8 +4789,18 @@ app.post('/api/employees/:id/conversation', async (req, res) => {
   if (await enforceWorkspaceAccess(req, res)) return;
   const companyId = getUserWorkspaceId(user);
   const empId = req.params.id;
-  const { message } = req.body || {};
-  const empCatalog = EMPLOYEE_CATALOG.find((e) => e.id === empId) || EMPLOYEE_CATALOG[0];
+  const message = String(req.body?.message || '').trim().slice(0, 6000);
+  if (!message) return res.status(400).json({ error: 'Write a message before sending it to this employee.' });
+  const empCatalog = EMPLOYEE_CATALOG.find((e) => e.id === empId);
+  if (!empCatalog) return res.status(404).json({ error: 'Employee not found.' });
+  const employeePlan = await loadEmployeePrebuildPlan(companyId, empId);
+  if (!employeePlan || (employeePlan.status !== 'approved' && employeePlan.status !== 'implemented')) {
+    return res.status(409).json({
+      error: `A detailed pre-build plan for ${empCatalog.name} must be approved before this dedicated workspace can run role-specific AI conversations.`,
+      code: 'employee_plan_not_approved',
+      plan: planPublicSummary(employeePlan)
+    });
+  }
   const empName = empCatalog.name;
   const msgs = await loadEmployeeConversation(companyId, empId, empName);
   const userMsg = { sender: 'manager', receiver: empId, body: message, created_at: new Date().toISOString() };
@@ -4634,53 +4898,19 @@ User Manager Message: "${message}"
 
 Respond as ${empName} directly to your manager in plain workplace chat. Keep it under 110 words unless detail is requested.`;
 
-  const empSpecialistConfig = EMPLOYEE_SPECIALIST_CONFIGS[empId] || EMPLOYEE_SPECIALIST_CONFIGS.sarah;
-  if (OPENROUTER_KEY_READY) {
-    try {
-      const response = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
-        method: 'POST',
-        signal: AbortSignal.timeout(OPENROUTER_TIMEOUT_MS),
-        headers: {
-          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': PUBLIC_APP_URL,
-          'X-OpenRouter-Title': `Caveworkers Direct Chat: ${empName}`
-        },
-        body: JSON.stringify({
-          model: specialistModelFor(empId),
-          temperature: 0.2,
-          max_tokens: 600,
-          stream: false,
-          user: crypto.createHash('sha256').update(companyId).digest('hex').slice(0, 32),
-          messages: [
-            { role: 'system', content: empSpecialistConfig.systemPrompt },
-            { role: 'user', content: conversationPrompt }
-          ]
-        })
-      });
-      if (response.ok) {
-        const payload: any = await response.json();
-        botAnswer = extractAnalystText(payload?.choices?.[0]?.message?.content);
-      }
-    } catch (openRouterErr) {
-      console.warn('OpenRouter conversation error, falling back to Gemini:', openRouterErr);
-    }
-  }
-
-  if (!botAnswer && genAIClient) {
-    try {
-      const response = await genAIClient.models.generateContent({
-        model: 'gemini-3.6-flash',
-        contents: conversationPrompt
-      });
-      botAnswer = response.text || '';
-    } catch (err) {
-      console.warn('Gemini conversation response note:', err);
-    }
-  }
+  const modelResult = await generateWorkforceNarrative(conversationPrompt, companyId, empId);
+  botAnswer = modelResult.text;
 
   if (!botAnswer) {
-    botAnswer = empId === 'sarah'
+    botAnswer = empId === 'data_analyst'
+      ? `I can prepare an evidence-first analysis of “${message}”. I’ll state the metric scope, available evidence, assumptions, and limits before recommending a next step. If a source or timeframe is missing, I’ll ask for it explicitly. No data write, payment, or external action has been claimed.`
+      : empId === 'cybersecurity_analyst'
+        ? `I can prepare a security brief for “${message}” with verified scope, severity, evidence, a least-privilege remediation option, rollback, and the approval needed. I will not change access, production controls, or incident status without verified provider evidence.`
+        : empId === 'backend_developer'
+          ? `I can classify “${message}”, map the affected components, and prepare a minimal implementation, test, rollback, and approval plan. I will not claim a repository write, migration, deployment, or payment integration action without verified provider evidence.`
+          : empId === 'qa_engineer'
+            ? `I can turn “${message}” into a test scope with observable acceptance criteria, environment, evidence, coverage gaps, and a release recommendation. I will not claim a test passed, release was approved, or payment flow ran without verified results.`
+      : empId === 'sarah'
       ? `I’ve got it. I’m taking ownership of “${message}” and will route the right part to the team. If I need a file, recipient, or approval before acting, I’ll ask for that explicitly. No external action has been claimed yet.`
       : empId === 'alex'
         ? `I’ve got it. I’ll turn this into an operating plan with an owner, deadline, dependencies, and next checkpoint. If one critical input is missing, I’ll ask for it before using a connector. No external action has been claimed yet.`
@@ -5106,6 +5336,7 @@ app.post('/api/task', async (req, res) => {
     res.status(202).json(result);
   } catch (error: any) {
     if (error?.code === 'task_quota_exceeded') return res.status(402).json({ error: error.message, code: error.code, limit: error.limit, usage: error.usage });
+    if (error?.code === 'employee_plan_not_approved') return res.status(409).json({ error: error.message, code: error.code, employee_id: error.employee_id, plan: error.plan });
     reportOperationalFailure('task.enqueue', error, { tenant_hash: anonymizeIdentifier(companyId) });
     return res.status(500).json({ error: 'The task could not be queued safely.' });
   }
@@ -5124,6 +5355,7 @@ app.post('/api/tasks', async (req, res) => {
     res.status(202).json(result);
   } catch (error: any) {
     if (error?.code === 'task_quota_exceeded') return res.status(402).json({ error: error.message, code: error.code, limit: error.limit, usage: error.usage });
+    if (error?.code === 'employee_plan_not_approved') return res.status(409).json({ error: error.message, code: error.code, employee_id: error.employee_id, plan: error.plan });
     reportOperationalFailure('task.enqueue', error, { tenant_hash: anonymizeIdentifier(companyId) });
     return res.status(500).json({ error: 'The task could not be queued safely.' });
   }
@@ -6004,7 +6236,12 @@ app.get('/api/activity', async (req, res) => {
 });
 
 const handleCreateOrder = async (req: express.Request, res: express.Response) => {
-  const user = getAuthUserOrDefault(req);
+  const user = getAuthUser(req);
+  if (!user) return res.status(401).json({ error: 'Authentication is required to initiate a live payment.' });
+  if (!requireWorkspaceRole(req, res, 'admin')) return;
+  if (req.body?.approval_context !== 'owner_checkout') {
+    return res.status(403).json({ error: 'Live Razorpay checkout requires an explicit owner confirmation. Agents may only prepare a recommendation or payment request.' });
+  }
   if (!razorpayClient || !RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) return res.status(503).json({ error: 'Payments are not configured on this server.' });
 
   const { tier, amount, currency, receipt } = req.body || {};

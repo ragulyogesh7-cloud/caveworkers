@@ -1,0 +1,25 @@
+.workforce-panel { max-width: 1180px; }
+.workforce-safety-note { display:flex; align-items:flex-start; gap:12px; margin:0 0 22px; padding:15px 17px; border:1px solid rgba(117, 223, 187, .25); border-radius:18px; background:linear-gradient(115deg, rgba(25, 63, 52, .42), rgba(12, 18, 39, .62)); color:#dceee7; }
+.workforce-safety-note p { margin:0; font-size:.9rem; line-height:1.55; }
+.safety-note-mark { display:grid; place-items:center; width:24px; height:24px; flex:0 0 24px; border-radius:50%; background:#62d8a8; color:#092419; font-weight:800; }
+.workforce-overview-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.workforce-overview-card { position:relative; overflow:hidden; padding:20px; border:1px solid rgba(160, 182, 228, .16); border-radius:22px; background:radial-gradient(circle at 100% 0, color-mix(in srgb, var(--employee-color) 18%, transparent), transparent 38%), linear-gradient(145deg, rgba(21, 31, 59, .93), rgba(10, 14, 31, .97)); box-shadow:0 14px 34px rgba(0, 0, 0, .16); }
+.workforce-overview-card::after { content:""; position:absolute; right:-48px; bottom:-58px; width:145px; height:145px; border-radius:50%; background:var(--employee-color); opacity:.08; filter:blur(5px); pointer-events:none; }
+.workforce-overview-top { display:grid; grid-template-columns:auto 1fr auto; gap:12px; align-items:center; }
+.workforce-overview-top h3 { margin:0; color:#f8fbff; font-size:1.05rem; letter-spacing:-.02em; }
+.workforce-overview-top p { margin:3px 0 0; color:#aab7d2; font-size:.82rem; }
+.workforce-code { font:500 .65rem/1 "DM Mono", monospace !important; color:#78e5ff !important; letter-spacing:.08em; }
+.workforce-employee-dp { width:46px; height:46px; }
+.plan-state { padding:6px 8px; border-radius:999px; font:500 .6rem/1 "DM Mono", monospace; letter-spacing:.07em; white-space:nowrap; background:rgba(147,163,184,.13); color:#c3cfdf; }
+.plan-state.draft { background:rgba(251,191,36,.13); color:#f9d267; }
+.plan-state.approved,.plan-state.implemented { background:rgba(92,214,163,.14); color:#8ce3bd; }
+.plan-state.rejected { background:rgba(251,113,133,.14); color:#fba7b5; }
+.workforce-card-copy { display:flex; align-items:center; gap:7px; margin:17px 0 12px; color:#bdc9df; font-size:.82rem; }
+.availability-dot { width:7px; height:7px; border-radius:50%; background:#65dda7; box-shadow:0 0 0 4px rgba(101,221,167,.09); }
+.workforce-capabilities { display:flex; flex-wrap:wrap; gap:7px; min-height:27px; }
+.workforce-capabilities span { padding:5px 8px; border:1px solid rgba(187,204,239,.12); border-radius:7px; color:#aebbd2; font-size:.7rem; background:rgba(4, 8, 21, .24); }
+.workforce-next { display:flex; align-items:end; justify-content:space-between; gap:12px; margin-top:18px; padding-top:15px; border-top:1px solid rgba(187,204,239,.11); }
+.workforce-next small { display:block; margin-bottom:4px; color:#73819d; font:500 .62rem/1 "DM Mono", monospace; letter-spacing:.08em; }
+.workforce-next b { display:block; color:#edf4ff; font-size:.78rem; font-weight:500; }
+.workforce-open { z-index:1; padding:8px 10px; font-size:.72rem; white-space:nowrap; }
+@media (max-width: 760px) { .workforce-overview-grid { grid-template-columns:1fr; } .workforce-overview-top { grid-template-columns:auto 1fr; } .plan-state { grid-column:1 / -1; justify-self:start; } }

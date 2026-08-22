@@ -50,6 +50,7 @@ function seedTenants() {
   db.mcpConnections.clear();
   db.workforceQueue.clear();
   db.employeePresence.clear();
+  db.employeePlans.clear();
   pendingPaymentOrders.clear();
   workforceTestHooks?.resetRateLimits();
 
@@ -204,6 +205,178 @@ describe('Caveworkers security invariants', () => {
     expect(res.body.success).toBe(true);
     expect(res.body.tier).toBe('enterprise');
     expect(db.companies.get('company-a')?.tier).toBe('enterprise');
+  });
+
+  it('keeps employee pre-build plans tenant-isolated and requires an explicit owner checkout context', async () => {
+    await csrfRequest('user-a', 'post', '/api/create-order')
+      .send({ tier: 'growth' })
+      .expect(403);
+
+    const sections = {
+      responsibilities: ['Analyse product and business data, then communicate evidence-backed findings.'],
+      skill_boundaries: ['Do not give tax, legal, or investment advice; flag missing evidence.'],
+      tool_boundaries: ['Use only assigned read tools. Never write to a third-party system without a recorded approval.'],
+      voice_persona: ['Calm, precise, concise, and explicit about assumptions.'],
+      model_strategy: ['Use the validated primary OpenRouter model with its configured fallback.'],
+      prompting: ['Use role context, tenant-approved memory, and bounded task context only.'],
+      memory_policy: ['Store approved data definitions and preferences only in this employee workspace.'],
+      evaluation_cases: ['Detect an unsupported assumption and request the missing source.'],
+      approval_rules: ['Prepare payment recommendations only. A signed-in owner must explicitly initiate Razorpay checkout.']
+    };
+
+    const saved = await csrfRequest('user-a', 'post', '/api/employees/data_analyst/prebuild-plan')
+      .send({ sections })
+      .expect(201);
+    expect(saved.body.plan).toMatchObject({ company_id: 'company-a', employee_id: 'data_analyst', status: 'draft', version: 1 });
+
+    db.orgEmployees.set('company-a', [{ id: 'data_analyst', name: 'Data Analyst', role: 'Data Analyst', department: 'Data & Business Intelligence', status: 'active', tools: [], permissions: [] }]);
+
+    await csrfRequest('user-a', 'post', '/api/employees/data_analyst/conversation')
+      .send({ message: 'Review the dashboard variance.' })
+      .expect(409)
+      .then((response) => expect(response.body.code).toBe('employee_plan_not_approved'));
+
+    await csrfRequest('user-a', 'post', '/api/tasks')
+      .send({ request: 'Review the dashboard variance.', preferred_employee_id: 'data_analyst' })
+      .expect(409)
+      .then((response) => expect(response.body.code).toBe('employee_plan_not_approved'));
+
+    await request(app)
+      .get('/api/employees/data_analyst/prebuild-plan')
+      .set('x-caveworkers-test-user', 'user-b')
+      .expect(200)
+      .then((response) => expect(response.body.plan).toBeNull());
+
+    const approved = await csrfRequest('user-a', 'post', '/api/employees/data_analyst/prebuild-plan/decision')
+      .send({ decision: 'approved' })
+      .expect(200);
+    expect(approved.body.summary).toMatchObject({ status: 'approved', ready_for_implementation: true });
+
+    await csrfRequest('user-a', 'post', '/api/employees/data_analyst/conversation')
+      .send({ message: 'Review the dashboard variance.' })
+      .expect(200)
+      .then((response) => {
+        expect(response.body.messages).toHaveLength(3);
+        expect(response.body.messages[2]?.body).toContain('evidence-first analysis');
+      });
+
+    await csrfRequest('user-a', 'post', '/api/tasks')
+      .send({ request: 'Review the dashboard variance.', preferred_employee_id: 'data_analyst' })
+      .expect(202)
+      .then((response) => expect(response.body.participants).toContain('Data Analyst'));
+
+    const overview = await request(app)
+      .get('/api/workforce/overview')
+      .set('x-caveworkers-test-user', 'user-a')
+      .expect(200);
+    const analyst = overview.body.employees.find((employee: any) => employee.id === 'data_analyst');
+    expect(analyst).toMatchObject({ plan: { status: 'approved', ready_for_implementation: true }, next_action: 'Ready for controlled implementation' });
+
+    await csrfRequest('user-a-member', 'post', '/api/employees/data_analyst/prebuild-plan')
+      .send({ sections })
+      .expect(403);
+  });
+
+  it('keeps Cybersecurity Analyst write-capable permissions review-gated even when autopilot is requested', async () => {
+    db.orgEmployees.set('company-a', [{ id: 'cybersecurity_analyst', name: 'Cybersecurity Analyst', role: 'Cybersecurity Analyst', department: 'Security & Compliance', status: 'active', tools: [], permissions: [], autonomy_mode: 'autopilot', high_impact_action_policy: 'review' }]);
+    db.mcpConnections.set('company-a:cybersecurity_analyst', [{
+      id: 44,
+      company_id: 'company-a',
+      employee_id: 'cybersecurity_analyst',
+      name: 'Identity Provider',
+      connection_type: 'streamable_http',
+      status: 'connected',
+      autonomy_mode: 'autopilot',
+      config: {},
+      discovered_tools: [{ name: 'identity.role.update', description: 'Update an account role' }],
+      tool_grants: [],
+      created_at: now,
+      updated_at: now
+    }]);
+
+    const employeePolicy = await csrfRequest('user-a', 'patch', '/api/employees/cybersecurity_analyst/autonomy')
+      .send({ autonomy_mode: 'autopilot', high_impact_action_policy: 'autopilot' })
+      .expect(200);
+    expect(employeePolicy.body.employee.high_impact_action_policy).toBe('review');
+
+    const connectorPolicy = await csrfRequest('user-a', 'patch', '/api/employees/cybersecurity_analyst/mcp-connections/44/autonomy')
+      .send({ autonomy_mode: 'autopilot', tool_name: 'identity.role.update', access_level: 'read_write' })
+      .expect(200);
+    expect(connectorPolicy.body.connection.autonomy_mode).toBe('copilot');
+    expect(connectorPolicy.body.connection.tool_grants).toEqual(expect.arrayContaining([expect.objectContaining({ tool_name: 'identity.role.update', access_level: 'requires_approval' })]));
+
+    const directTool = await csrfRequest('user-a', 'post', '/api/employees/cybersecurity_analyst/tools')
+      .send({ tool_name: 'Security Scanner', action: 'add', access_level: 'read_write' })
+      .expect(200);
+    expect(directTool.body.permissions).toEqual(expect.arrayContaining([expect.objectContaining({ tool_name: 'Security Scanner', access_level: 'requires_approval' })]));
+  });
+
+  it('keeps Backend Developer repository and deployment-capable permissions review-gated even when autopilot is requested', async () => {
+    db.orgEmployees.set('company-a', [{ id: 'backend_developer', name: 'Full Stack Backend Developer', role: 'Full Stack Backend Developer', department: 'Engineering & Architecture', status: 'active', tools: [], permissions: [], autonomy_mode: 'autopilot', high_impact_action_policy: 'review' }]);
+    db.mcpConnections.set('company-a:backend_developer', [{
+      id: 45,
+      company_id: 'company-a',
+      employee_id: 'backend_developer',
+      name: 'GitHub Workspace',
+      connection_type: 'streamable_http',
+      status: 'connected',
+      autonomy_mode: 'autopilot',
+      config: {},
+      discovered_tools: [{ name: 'github.commit.create', description: 'Create a repository commit' }],
+      tool_grants: [],
+      created_at: now,
+      updated_at: now
+    }]);
+
+    const employeePolicy = await csrfRequest('user-a', 'patch', '/api/employees/backend_developer/autonomy')
+      .send({ autonomy_mode: 'autopilot', high_impact_action_policy: 'autopilot' })
+      .expect(200);
+    expect(employeePolicy.body.employee.high_impact_action_policy).toBe('review');
+
+    const connectorPolicy = await csrfRequest('user-a', 'patch', '/api/employees/backend_developer/mcp-connections/45/autonomy')
+      .send({ autonomy_mode: 'autopilot', tool_name: 'github.commit.create', access_level: 'read_write' })
+      .expect(200);
+    expect(connectorPolicy.body.connection.autonomy_mode).toBe('copilot');
+    expect(connectorPolicy.body.connection.tool_grants).toEqual(expect.arrayContaining([expect.objectContaining({ tool_name: 'github.commit.create', access_level: 'requires_approval' })]));
+
+    const directTool = await csrfRequest('user-a', 'post', '/api/employees/backend_developer/tools')
+      .send({ tool_name: 'GitHub MCP', action: 'add', access_level: 'read_write' })
+      .expect(200);
+    expect(directTool.body.permissions).toEqual(expect.arrayContaining([expect.objectContaining({ tool_name: 'GitHub MCP', access_level: 'requires_approval' })]));
+  });
+
+  it('keeps QA Engineer shared-environment and release-capable permissions review-gated even when autopilot is requested', async () => {
+    db.orgEmployees.set('company-a', [{ id: 'qa_engineer', name: 'Software QA / Automation Engineer', role: 'Software QA / Automation Engineer', department: 'Quality Assurance & Release Engineering', status: 'active', tools: [], permissions: [], autonomy_mode: 'autopilot', high_impact_action_policy: 'review' }]);
+    db.mcpConnections.set('company-a:qa_engineer', [{
+      id: 46,
+      company_id: 'company-a',
+      employee_id: 'qa_engineer',
+      name: 'Test Runner',
+      connection_type: 'streamable_http',
+      status: 'connected',
+      autonomy_mode: 'autopilot',
+      config: {},
+      discovered_tools: [{ name: 'test.shared_environment.run', description: 'Run an integration suite in a shared environment' }],
+      tool_grants: [],
+      created_at: now,
+      updated_at: now
+    }]);
+
+    const employeePolicy = await csrfRequest('user-a', 'patch', '/api/employees/qa_engineer/autonomy')
+      .send({ autonomy_mode: 'autopilot', high_impact_action_policy: 'autopilot' })
+      .expect(200);
+    expect(employeePolicy.body.employee.high_impact_action_policy).toBe('review');
+
+    const connectorPolicy = await csrfRequest('user-a', 'patch', '/api/employees/qa_engineer/mcp-connections/46/autonomy')
+      .send({ autonomy_mode: 'autopilot', tool_name: 'test.shared_environment.run', access_level: 'read_write' })
+      .expect(200);
+    expect(connectorPolicy.body.connection.autonomy_mode).toBe('copilot');
+    expect(connectorPolicy.body.connection.tool_grants).toEqual(expect.arrayContaining([expect.objectContaining({ tool_name: 'test.shared_environment.run', access_level: 'requires_approval' })]));
+
+    const directTool = await csrfRequest('user-a', 'post', '/api/employees/qa_engineer/tools')
+      .send({ tool_name: 'Test Runner', action: 'add', access_level: 'read_write' })
+      .expect(200);
+    expect(directTool.body.permissions).toEqual(expect.arrayContaining([expect.objectContaining({ tool_name: 'Test Runner', access_level: 'requires_approval' })]));
   });
 
   it('returns 402 for an expired free trial before a workspace task is queued', async () => {

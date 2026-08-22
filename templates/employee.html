@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="/static/motion.css">
   <link rel="stylesheet" href="/static/ui-reimplementation.css">
   <link rel="stylesheet" href="/static/employee.css">
+  <link rel="stylesheet" href="/static/employee-workspace.css">
 </head>
 <body class="command-body employee-body" data-employee-id="<%= employee.id %>">
   <div class="app-shell">
@@ -48,12 +49,33 @@
           <div class="employee-hero-meta"><span class="autonomy-chip"><%= employee.autonomy_level %></span><span class="active-chip" id="employee-instance-state">Checking workspace access</span></div>
         </section>
 
+        <section class="panel-block prebuild-plan-card" id="prebuild-plan">
+          <div class="panel-head"><div><p class="panel-kicker">MANDATORY PRE-BUILD PLAN</p><h2>Design <%= employee.name %> before enabling role work</h2></div><span class="plan-workspace-state" id="employee-plan-status">Loading plan</span></div>
+          <p class="section-help">The owner approves responsibilities, skill and tool boundaries, voice, model strategy, memory, evaluations, and human-review rules before this employee’s dedicated AI conversation is enabled.</p>
+          <div class="plan-model-summary" id="employee-plan-model-summary"><span>Loading model strategy…</span></div>
+          <form id="employee-plan-form" class="employee-plan-form">
+            <div class="plan-field-grid">
+              <label>Responsibilities<textarea data-plan-section="responsibilities" rows="3" placeholder="Outcomes this employee owns, one per line."></textarea></label>
+              <label>Skill boundaries<textarea data-plan-section="skill_boundaries" rows="3" placeholder="Work this employee must refuse, flag, or hand off."></textarea></label>
+              <label>Tool boundaries<textarea data-plan-section="tool_boundaries" rows="3" placeholder="Allowed tools, prohibited actions, and evidence requirements."></textarea></label>
+              <label>Voice &amp; communication style<textarea data-plan-section="voice_persona" rows="3" placeholder="Tone, format, concision, and escalation language."></textarea></label>
+              <label>OpenRouter model strategy<textarea data-plan-section="model_strategy" rows="3" placeholder="Primary/fallback rationale, latency, token budget, and routing policy."></textarea></label>
+              <label>Prompting contract<textarea data-plan-section="prompting" rows="3" placeholder="Grounding requirements, assumptions, and output structure."></textarea></label>
+              <label>Memory policy<textarea data-plan-section="memory_policy" rows="3" placeholder="What may be saved, isolated, retrieved, and never retained."></textarea></label>
+              <label>Evaluation cases<textarea data-plan-section="evaluation_cases" rows="3" placeholder="Representative success, refusal, ambiguity, and failure cases."></textarea></label>
+              <label>Human-approval rules<textarea data-plan-section="approval_rules" rows="3" placeholder="Required approval points, including absolute Razorpay payment controls."></textarea></label>
+            </div>
+            <div class="plan-form-footer"><p>One line equals one explicit control. Saving creates a new draft; only an owner can approve it for implementation.</p><button class="text-button" type="submit">Save detailed plan <span>↗</span></button></div>
+          </form>
+          <div class="plan-decision-row" id="employee-plan-decisions" hidden><p id="employee-plan-decision-copy">Review the draft before enabling the workspace.</p><div><button class="text-button plan-reject" id="employee-plan-reject" type="button">Request revision</button><button class="run-button" id="employee-plan-approve" type="button">Approve for implementation <span>↗</span></button></div></div>
+        </section>
+
         <section class="employee-work-grid">
           <article class="panel-block employee-brief-card">
-            <div class="panel-head"><div><p class="panel-kicker">DIRECT BRIEF</p><h2>Give <%= employee.name %> a task</h2></div><a class="panel-link" href="/command#new-task">Open team task ↗</a></div>
-            <p class="section-help">Use a team task when the work needs other specialists. <%= employee.name %> will name and involve the right teammates in the visible task group chat.</p>
-            <form id="employee-brief-form" class="employee-brief-form"><textarea id="employee-brief" rows="5" placeholder="Describe the outcome, deadline, context, and any data or tools <%= employee.name %> should use."></textarea><button type="submit" class="run-button">Start collaborative task <span>↗</span></button></form>
-            <div id="employee-brief-result" class="employee-brief-result" hidden></div>
+            <div class="panel-head"><div><p class="panel-kicker">PRIVATE ROLE CONVERSATION</p><h2>Work directly with <%= employee.name %></h2></div><a class="panel-link" href="/command">Open team room ↗</a></div>
+            <p class="section-help">This conversation, its approved memory, and its work history stay inside <%= employee.name %>’s tenant-scoped workspace. Use the team room only when a cross-functional handoff is needed.</p>
+            <div class="employee-conversation" id="employee-conversation" aria-live="polite"><p class="empty-state-sm">A detailed plan must be approved before this role conversation is available.</p></div>
+            <form id="employee-chat-form" class="employee-brief-form"><textarea id="employee-chat-input" rows="4" maxlength="6000" placeholder="Describe the outcome, context, constraints, and evidence you need from <%= employee.name %>." disabled></textarea><button type="submit" class="run-button" disabled>Send to <%= employee.name %> <span>↗</span></button></form>
           </article>
 
           <article class="panel-block employee-tool-card" id="employee-tools">
