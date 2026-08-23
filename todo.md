@@ -55,4 +55,7 @@
 - [x] Repair the company-room composer so Send note and Start the work remain legible and responsive at desktop and mobile widths.
 - [x] Replace generic company-room queue failures with actionable user-safe error messaging while preserving plan and policy gates.
 - [x] Add regression coverage for the responsive composer controls and queue-unavailable safe failure guidance.
+- [x] Diagnose and repair the unexpected authenticated onboarding redirect while preserving the owner’s existing company workspace and tenant data.
+- [x] Recover a previously active company by verified owner identity when a stale or missing user profile would otherwise create a new onboarding workspace.
+- [x] Add regression coverage for active-workspace recovery and ensure blank onboarding records never override an existing active tenant.
 - [x] Document the deferred Cloud Run, Secret Manager, billing, and private Hermes requirements for the later full-runtime rollout.

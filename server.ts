@@ -1150,6 +1150,50 @@ async function loadCompanyFromFirebase(id: string): Promise<Company | null> {
   }
 }
 
+function isActiveCompanyWorkspace(company: Company | null | undefined): company is Company {
+  return Boolean(company && company.status === 'active' && String(company.name || '').trim());
+}
+
+async function findActiveCompanyOwnedBy(uid: string): Promise<Company | null> {
+  const cached = Array.from(db.companies.values())
+    .filter((company) => company.owner_uid === uid && isActiveCompanyWorkspace(company))
+    .sort((left, right) => (right.created_at || '').localeCompare(left.created_at || ''));
+  if (cached[0]) return cached[0];
+  if (!firestoreDb) return null;
+
+  try {
+    const snapshot = await firestoreDb.collection('companies').where('owner_uid', '==', uid).limit(12).get();
+    const companies = snapshot.docs
+      .map((document) => ({ id: document.id, ...(document.data() || {}) }) as Company)
+      .filter(isActiveCompanyWorkspace)
+      .sort((left, right) => (right.created_at || '').localeCompare(left.created_at || ''));
+    companies.forEach((company) => db.companies.set(company.id, company));
+    return companies[0] || null;
+  } catch (error) {
+    console.warn('Could not look up active owner workspace:', error);
+    return null;
+  }
+}
+
+async function recoverActiveWorkspaceForOwner(user: User): Promise<User> {
+  const currentCompany = user.company_id ? await loadCompanyFromFirebase(user.company_id) || db.companies.get(user.company_id) : null;
+  const recoveredCompany = isActiveCompanyWorkspace(currentCompany)
+    ? currentCompany
+    : await findActiveCompanyOwnedBy(user.uid);
+  if (!recoveredCompany) return user;
+
+  const recovered = {
+    ...user,
+    company_id: recoveredCompany.id,
+    company_name: recoveredCompany.name,
+    selected_tier: recoveredCompany.tier || user.selected_tier,
+    onboarded: true
+  };
+  const changed = recovered.company_id !== user.company_id || recovered.company_name !== user.company_name || !user.onboarded;
+  if (changed) await persistUser(recovered);
+  return recovered;
+}
+
 function stripUndefined<T>(value: T): T {
   if (Array.isArray(value)) return value.filter((item) => item !== undefined).map((item) => stripUndefined(item)) as T;
   if (!value || typeof value !== 'object' || value instanceof Date || Buffer.isBuffer(value)) return value;
@@ -3855,15 +3899,7 @@ app.use(async (req, res, next) => {
       db.users.set(localSession.uid, user);
     }
     if (user) {
-      if (user.company_id && !db.companies.has(user.company_id)) {
-        const company = await loadCompanyFromFirebase(user.company_id);
-        if (company && (company.status === 'active' || Boolean(company.name && company.selected_employees?.length))) {
-          if (!user.onboarded) {
-            user.onboarded = true;
-            await persistUser(user);
-          }
-        }
-      }
+      user = await recoverActiveWorkspaceForOwner(user);
       authenticatedUsers.set(req, user);
       return next();
     }
@@ -3890,15 +3926,7 @@ app.use(async (req, res, next) => {
         db.users.set(decoded.uid, user);
       }
       if (user) {
-        if (user.company_id && !db.companies.has(user.company_id)) {
-          const company = await loadCompanyFromFirebase(user.company_id);
-          if (company && (company.status === 'active' || Boolean(company.name && company.selected_employees?.length))) {
-            if (!user.onboarded) {
-              user.onboarded = true;
-              await persistUser(user);
-            }
-          }
-        }
+        user = await recoverActiveWorkspaceForOwner(user);
         authenticatedUsers.set(req, user);
         return next();
       }
@@ -4217,12 +4245,15 @@ app.post('/api/session-login', async (req, res) => {
   const now = new Date().toISOString();
   const existingUser = (await loadUserFromFirebase(decodedUser.uid)) || db.users.get(decodedUser.uid);
   const generatedCompanyId = stableGoogleWorkspaceId(decodedUser.uid);
-  const companyId = existingUser?.company_id && existingUser.company_id !== DEFAULT_COMPANY_ID ? existingUser.company_id : generatedCompanyId;
-  const existingCompany = (await loadCompanyFromFirebase(companyId)) || db.companies.get(companyId);
+  const existingCompanyId = existingUser?.company_id && existingUser.company_id !== DEFAULT_COMPANY_ID ? existingUser.company_id : generatedCompanyId;
+  const storedCompany = (await loadCompanyFromFirebase(existingCompanyId)) || db.companies.get(existingCompanyId);
+  const recoveredCompany = isActiveCompanyWorkspace(storedCompany) ? storedCompany : await findActiveCompanyOwnedBy(decodedUser.uid);
+  const companyId = recoveredCompany?.id || existingCompanyId;
+  const existingCompany = recoveredCompany || storedCompany;
   const companyName = existingCompany?.name || existingUser?.company_name || '';
 
   let isOnboarded = Boolean(existingUser?.onboarded);
-  if (!isOnboarded && existingCompany && (existingCompany.status === 'active' || Boolean(existingCompany.name && existingCompany.selected_employees?.length))) {
+  if (!isOnboarded && isActiveCompanyWorkspace(existingCompany)) {
     isOnboarded = true;
   }
 
@@ -5602,7 +5633,7 @@ function startWorkflowScheduler() {
 }
 
 export const workforceTestHooks = process.env.NODE_ENV === 'test'
-  ? { handleTaskRoutingAsync, selectCollaborativeTeam, executeEmployeeReadTools, dispatchApprovedEmployeeEmail, dispatchApprovedMcpTool, processNextWorkforceJob: () => processNextWorkforceJob(true), processDueScheduledWorkflows, processDueTenantDeletions, nextCronOccurrence, resetRateLimits: () => rateLimitBuckets.clear() }
+  ? { handleTaskRoutingAsync, selectCollaborativeTeam, executeEmployeeReadTools, dispatchApprovedEmployeeEmail, dispatchApprovedMcpTool, processNextWorkforceJob: () => processNextWorkforceJob(true), processDueScheduledWorkflows, processDueTenantDeletions, nextCronOccurrence, recoverActiveWorkspaceForOwner, resetRateLimits: () => rateLimitBuckets.clear() }
   : undefined;
 
 app.post('/api/task', async (req, res) => {

@@ -95,6 +95,19 @@ async function approvePlan(employeeId: string) {
 afterEach(() => vi.restoreAllMocks());
 
 describe('Caveworkers current workforce and billing invariants', () => {
+  it('recovers an owner to an existing active workspace instead of leaving a blank onboarding tenant selected', async () => {
+    const ownerUid = 'recover-owner';
+    const activeCompany = { id: 'company-active', name: 'Existing Company', owner_uid: ownerUid, tier: 'growth', status: 'active', created_at: now, selected_employees: FOUR_EMPLOYEES.map((employee) => employee.id) };
+    db.companies.set(activeCompany.id, activeCompany);
+    const staleUser = { uid: ownerUid, email: 'owner@example.com', display_name: 'Owner', company_id: 'org_google_new', company_name: '', onboarded: false, selected_tier: 'free_trial', role: 'owner', created_at: now };
+    db.users.set(ownerUid, staleUser);
+
+    const recovered = await workforceTestHooks?.recoverActiveWorkspaceForOwner(staleUser);
+
+    expect(recovered).toMatchObject({ company_id: activeCompany.id, company_name: activeCompany.name, onboarded: true, selected_tier: 'growth' });
+    expect(db.users.get(ownerUid)).toMatchObject({ company_id: activeCompany.id, onboarded: true });
+  });
+
   beforeEach(() => seedTenants());
 
   it('verifies Razorpay signatures and rejects tampering', () => {
