@@ -4453,6 +4453,74 @@ app.post('/api/onboarding/save-company', async (req, res) => {
   }
 });
 
+app.post('/api/onboarding/quick-start', async (req, res) => {
+  try {
+    const user = getAuthUser(req);
+    if (!user) return res.status(401).json({ error: 'Authentication required.' });
+    if (user.onboarded) return res.json({ ok: true, redirect: '/command' });
+
+    const recoveredCompany = await findActiveCompanyOwnedBy(user.uid);
+    if (recoveredCompany) {
+      const recoveredUser = await recoverActiveWorkspaceForOwner(user);
+      authenticatedUsers.set(req, recoveredUser);
+      return res.json({ ok: true, redirect: '/command', recovered: true });
+    }
+
+    const companyId = user.company_id || stableGoogleWorkspaceId(user.uid);
+    const existingCompany = await loadCompanyFromFirebase(companyId) || db.companies.get(companyId);
+    if (existingCompany && existingCompany.owner_uid && existingCompany.owner_uid !== user.uid) {
+      return res.status(409).json({ error: 'This workspace cannot be activated by the current account.', code: 'workspace_owner_mismatch' });
+    }
+
+    const now = new Date().toISOString();
+    const workspaceName = `${String(user.display_name || user.email.split('@')[0] || 'My').trim().slice(0, 80) || 'My'} Workspace`;
+    const company: Company = {
+      id: companyId,
+      name: existingCompany?.name || workspaceName,
+      industry: existingCompany?.industry || '',
+      team_size: existingCompany?.team_size || '',
+      user_role: existingCompany?.user_role || '',
+      business_goals: existingCompany?.business_goals || '',
+      workspace_guidelines: existingCompany?.workspace_guidelines || 'Require approval for consequential, destructive, production, payment, or external actions.',
+      description: existingCompany?.description || '',
+      guidelines: existingCompany?.guidelines || 'Require approval for consequential, destructive, production, payment, or external actions.',
+      owner_uid: user.uid,
+      tier: user.selected_tier || existingCompany?.tier || 'free_trial',
+      status: 'active',
+      selected_employees: EMPLOYEE_CATALOG.map((employee) => employee.id),
+      trial_started_at: existingCompany?.trial_started_at || now,
+      trial_ends_at: existingCompany?.trial_ends_at || new Date(Date.now() + (SUBSCRIPTION_PLANS.free_trial.trial_days || 3) * 24 * 60 * 60 * 1000).toISOString(),
+      created_at: existingCompany?.created_at || now
+    };
+    const activeEmployees: OrgEmployee[] = EMPLOYEE_CATALOG.map((employee) => ({
+      id: employee.id,
+      employee_id: employee.id,
+      name: employee.name,
+      role: employee.role,
+      department: employee.department,
+      color: employee.color,
+      avatar_url: employee.avatar_url,
+      status: 'active',
+      tools: [...employee.default_tools],
+      permissions: employee.default_tools.map((tool) => ({ tool_name: tool, access_level: defaultEmployeeToolAccess(employee.id, tool) })),
+      autonomy_mode: 'autopilot',
+      high_impact_action_policy: 'review',
+      connector_policy: 'assigned_only'
+    }));
+    const activatedUser: User = { ...user, company_id: company.id, company_name: company.name, selected_tier: company.tier, onboarded: true };
+    await persistCompany(company);
+    await persistOrgEmployees(company.id, activeEmployees);
+    await persistUser(activatedUser);
+    await syncCompanyToEmployeeMemory(company.id, activatedUser, company);
+    await persistActivityLog(company.id, { id: Date.now(), sender: 'System', receiver: 'Workspace', kind: 'workspace.quick_started', body: 'Created a new default workspace with the four approved employees. Role-specific work remains plan-gated.', created_at: now });
+    authenticatedUsers.set(req, activatedUser);
+    res.status(201).json({ ok: true, redirect: '/command', company: { id: company.id, name: company.name }, employees: activeEmployees.map((employee) => employee.employee_id) });
+  } catch (error: any) {
+    console.error('Error quick-starting workspace:', error);
+    res.status(500).json({ error: 'Could not create the default workspace. No company workspace was activated.' });
+  }
+});
+
 app.post('/api/onboarding/select-plan', async (req, res) => {
   try {
     const user = getAuthUser(req);

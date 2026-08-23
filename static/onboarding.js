@@ -159,6 +159,22 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  const quickStartBtn = document.getElementById("quick-start-workspace");
+  if (quickStartBtn) {
+    quickStartBtn.addEventListener("click", async () => {
+      quickStartBtn.disabled = true;
+      quickStartBtn.textContent = "Creating workspace…";
+      try {
+        const result = await postJson("/api/onboarding/quick-start");
+        window.location.assign(result.redirect || "/command");
+      } catch (error) {
+        showError(error.message || "Could not create the default workspace.");
+        quickStartBtn.disabled = false;
+        quickStartBtn.textContent = "Use a default workspace";
+      }
+    });
+  }
+
   // Step 2 plan card handlers
   document.querySelectorAll(".plan-card").forEach((card) => {
     card.addEventListener("click", () => {

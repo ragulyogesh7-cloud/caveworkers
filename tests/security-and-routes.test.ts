@@ -108,6 +108,19 @@ describe('Caveworkers current workforce and billing invariants', () => {
     expect(db.users.get(ownerUid)).toMatchObject({ company_id: activeCompany.id, onboarded: true });
   });
 
+  it('quick-starts only the verified owner’s new four-employee workspace while keeping role work plan-gated', async () => {
+    const ownerUid = 'quick-start-owner';
+    db.users.set(ownerUid, { uid: ownerUid, email: 'quickstart@example.com', display_name: 'Quick Start', company_id: 'company-quick-start', company_name: '', onboarded: false, selected_tier: 'free_trial', role: 'owner', created_at: now });
+
+    const activation = await csrfRequest(ownerUid, 'post', '/api/onboarding/quick-start').send({}).expect(201);
+
+    expect(activation.body).toMatchObject({ ok: true, redirect: '/command', company: { id: 'company-quick-start', name: 'Quick Start Workspace' } });
+    expect(activation.body.employees).toEqual(FOUR_EMPLOYEES.map((employee) => employee.id));
+    expect(db.users.get(ownerUid)).toMatchObject({ company_id: 'company-quick-start', onboarded: true });
+    expect(db.companies.get('company-quick-start')).toMatchObject({ status: 'active', owner_uid: ownerUid, selected_employees: FOUR_EMPLOYEES.map((employee) => employee.id) });
+    expect((await csrfRequest(ownerUid, 'post', '/api/tasks').send({ request: 'Ask Cybersecurity Analyst to review our IAM access', preferred_employee_id: 'cybersecurity_analyst' })).status).toBe(409);
+  });
+
   beforeEach(() => seedTenants());
 
   it('verifies Razorpay signatures and rejects tampering', () => {

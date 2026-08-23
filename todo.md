@@ -58,4 +58,6 @@
 - [x] Diagnose and repair the unexpected authenticated onboarding redirect while preserving the owner’s existing company workspace and tenant data.
 - [x] Recover a previously active company by verified owner identity when a stale or missing user profile would otherwise create a new onboarding workspace.
 - [x] Add regression coverage for active-workspace recovery and ensure blank onboarding records never override an existing active tenant.
+- [x] Provide a safe first-workspace activation route for a verified owner when no active company record can be recovered, without fabricating historical company data.
+- [x] Add regression coverage proving quick start creates only the caller’s active four-employee workspace and does not bypass role approval gates.
 - [x] Document the deferred Cloud Run, Secret Manager, billing, and private Hermes requirements for the later full-runtime rollout.

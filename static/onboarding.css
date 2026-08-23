@@ -751,6 +751,13 @@ body.onboarding-body {
   border-top: 1px solid var(--ob-line);
 }
 
+.onboarding-quickstart-note {
+  margin: 13px 0 0;
+  color: var(--ob-faint);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
