@@ -52,4 +52,7 @@
 - [x] Replace stale public landing-page references to Sarah, David, Alex, and a three-person legacy crew with the approved four employee roles and safety boundary.
 - [x] Add a regression test that prevents legacy employees, unsupported connector claims, and fabricated live-performance metrics from returning to the public landing page.
 - [x] Allow general company-room messages while retaining owner-approved plan gates for role-specific work queueing.
+- [x] Repair the company-room composer so Send note and Start the work remain legible and responsive at desktop and mobile widths.
+- [x] Replace generic company-room queue failures with actionable user-safe error messaging while preserving plan and policy gates.
+- [x] Add regression coverage for the responsive composer controls and queue-unavailable safe failure guidance.
 - [x] Document the deferred Cloud Run, Secret Manager, billing, and private Hermes requirements for the later full-runtime rollout.

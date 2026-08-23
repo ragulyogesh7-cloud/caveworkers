@@ -770,7 +770,12 @@ async function submitTask(event) {
   } catch (error) {
     pendingMessages = pendingMessages.filter((entry) => entry !== pending);
     renderRoomFeed();
-    setRoomNotice(error.upgradeRequired ? `${error.message} Open Settings to choose a paid plan.` : error.message, 'error');
+    if (error.payload?.code === 'task_queue_unavailable' || /task could not be queued safely/i.test(error.message || '')) {
+      setExecutionLive('failure', 'Work not started', 'No agent work was queued. Send the request as a note or retry shortly.');
+      setRoomNotice('Work was not started. No agent work was queued; you can use Send note to keep the discussion in the room.', 'error');
+    } else {
+      setRoomNotice(error.upgradeRequired ? `${error.message} Open Settings to choose a paid plan.` : error.message, 'error');
+    }
   } finally {
     button.disabled = false;
     button.innerHTML = 'Start the work <span>↗</span>';

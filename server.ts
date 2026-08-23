@@ -4967,10 +4967,10 @@ app.post('/api/workforce/workroom', async (req, res) => {
   const companyId = getTenantIdOrFail(req, res);
   if (!user || !companyId) return;
   if (await enforceWorkspaceAccess(req, res)) return;
-  const message = String(req.body?.message || '').trim().slice(0, 6000);
-  if (!message) return res.status(400).json({ error: 'A company workroom message is required.' });
+  const workroomMessage = String(req.body?.message || '').trim().slice(0, 6000);
+  if (!workroomMessage) return res.status(400).json({ error: 'A company workroom message is required.' });
   try {
-    const result = await enqueueWorkforceTask(companyId, message, typeof req.body?.preferred_employee_id === 'string' ? req.body.preferred_employee_id : undefined, typeof req.body?.email_employee_id === 'string' ? req.body.email_employee_id : undefined);
+    const result = await enqueueWorkforceTask(companyId, workroomMessage, typeof req.body?.preferred_employee_id === 'string' ? req.body.preferred_employee_id : undefined, typeof req.body?.email_employee_id === 'string' ? req.body.email_employee_id : undefined);
     res.status(202).json(result);
   } catch (error: any) {
     if (error?.code === 'task_quota_exceeded') return res.status(402).json({ error: error.message, code: error.code, limit: error.limit, usage: error.usage });
