@@ -8,6 +8,7 @@ const client = readFileSync(resolve(process.cwd(), 'static/command.js'), 'utf8')
 
 describe('company-room composer contract', () => {
   it('defaults the room to a natural whole-team conversation with single primary action', () => {
+    expect(template).toContain('/static/command.css?v=command-rebuild-20260824');
     expect(template).toContain('id="run"');
     expect(template).not.toContain('id="send-note"');
     expect(template).toContain('Whole team');
