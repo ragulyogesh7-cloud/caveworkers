@@ -183,6 +183,7 @@ async function responseJson(url, options) {
     const error = new Error(data.error || 'The request could not be completed.');
     error.upgradeRequired = Boolean(data.upgrade_required);
     error.payload = data;
+    error.status = response.status;
     throw error;
   }
   return data;
@@ -766,7 +767,7 @@ async function submitTask(event) {
   setRoomNotice(preferred && preferred !== '__whole_team__' ? `Speaking with ${target} directly.` : `Routing this task to ${target}.`, '');
   try {
     const idempotencyKey = `room:${crypto.randomUUID()}`;
-    const task = await responseJson('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request, preferred_employee_id: preferred, idempotency_key: idempotencyKey }) });
+    const task = await responseJson('/api/workforce/workroom', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: request, preferred_employee_id: preferred, idempotency_key: idempotencyKey }) });
     pendingMessages = pendingMessages.filter((entry) => entry !== pending);
     const existingTask = workroomTasks.find((entry) => entry.id === task.id);
     if (!existingTask) workroomTasks.push(task);
@@ -777,8 +778,8 @@ async function submitTask(event) {
     pendingMessages = pendingMessages.filter((entry) => entry !== pending);
     renderRoomFeed();
     if (error.payload?.code === 'task_queue_unavailable' || /task could not be queued safely/i.test(error.message || '')) {
-      setExecutionLive('failure', 'Work not started', 'No agent work was queued. Send the request as a note or retry shortly.');
-      setRoomNotice('Work was not started. No agent work was queued; you can use Send note to keep the discussion in the room.', 'error');
+      setExecutionLive('failure', 'Room queue is retryable', 'The conversation was not admitted yet. Retry once the workforce queue responds.');
+      setRoomNotice('The company room could not start this conversation yet. The workforce queue is retryable; please try again.', 'error');
     } else {
       setRoomNotice(error.upgradeRequired ? `${error.message} Open Settings to choose a paid plan.` : error.message, 'error');
     }

@@ -1855,16 +1855,24 @@ async function reserveTaskQuota(companyId: string) {
   const collection = usageCollection(companyId);
   if (collection && firestoreDb) {
     const ref = collection.doc(period);
-    const record = await firestoreDb.runTransaction(async (transaction) => {
-      const snapshot = await transaction.get(ref);
-      const current = { company_id: companyId, period, tasks_created: 0, tasks_completed: 0, tool_calls: 0, external_actions: 0, estimated_tokens: 0, updated_at: new Date().toISOString(), ...(snapshot.data() || {}) } as UsageLedgerRecord;
-      if (limit > 0 && current.tasks_created >= limit) throw taskQuotaError(plan, current);
-      const next = { ...current, tasks_created: Number(current.tasks_created || 0) + 1, updated_at: new Date().toISOString() };
-      transaction.set(ref, stripUndefined(next), { merge: true });
-      return next;
-    });
-    db.usage.set(usageLedgerKey(companyId, period), record);
-    return { record, limit, plan };
+    try {
+      const record = await firestoreDb.runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(ref);
+        const current = { company_id: companyId, period, tasks_created: 0, tasks_completed: 0, tool_calls: 0, external_actions: 0, estimated_tokens: 0, updated_at: new Date().toISOString(), ...(snapshot.data() || {}) } as UsageLedgerRecord;
+        if (limit > 0 && current.tasks_created >= limit) throw taskQuotaError(plan, current);
+        const next = { ...current, tasks_created: Number(current.tasks_created || 0) + 1, updated_at: new Date().toISOString() };
+        transaction.set(ref, stripUndefined(next), { merge: true });
+        return next;
+      });
+      db.usage.set(usageLedgerKey(companyId, period), record);
+      return { record, limit, plan };
+    } catch (error: any) {
+      if (error?.code === 'task_quota_exceeded') throw error;
+      reportOperationalFailure('usage.quota_reservation', error, { tenant_hash: anonymizeIdentifier(companyId) });
+      // Keep the room usable during a transient billing-store outage while
+      // retaining the same quota check for this process and recording recovery
+      // telemetry for operators.
+    }
   }
   const record = await loadUsageLedger(companyId, period);
   if (limit > 0 && record.tasks_created >= limit) throw taskQuotaError(plan, record);
@@ -2355,8 +2363,11 @@ async function reserveWorkforceIdempotency(companyId: string, key: string, taskI
       return null;
     });
   } catch (error) {
-    if (!isInitialDatabaseStatusError(error)) reportOperationalFailure('task.idempotency_reservation', error, { tenant_hash: anonymizeIdentifier(companyId) });
-    throw error;
+    reportOperationalFailure('task.idempotency_reservation', error, { tenant_hash: anonymizeIdentifier(companyId) });
+    // Queue admission remains available when the optional idempotency index is
+    // temporarily unavailable; the task itself is still persisted and the
+    // client-generated key prevents accidental replay within this process.
+    return null;
   }
 }
 
@@ -2600,8 +2611,11 @@ async function enqueueWorkforceTask(companyId: string, question: string, preferr
   await persistActivityLog(companyId, { id: Date.now(), sender: 'Manager', receiver: 'Caveworkers worker', kind: 'task.queued', body: `Task #${taskId} entered the always-on employee queue.`, created_at: now });
   await auditWorkforceAction({ company_id: companyId, actor_type: 'user', actor_id: 'workspace-manager', action: 'task.queued', resource_type: 'task', resource_id: String(taskId), task_id: taskId, risk: 'low', status: 'prepared', summary: `Task #${taskId} entered the workforce queue.`, correlation_id: job.id, metadata: { idempotency_key: job.idempotency_key, preferred_employee_id: routedEmployeeId || 'auto' } });
   emitWorkroomEvent(companyId, taskId, { type: 'task_update', task: workroomSnapshot(task) });
-  // Wake the process-local worker immediately; the interval remains a recovery poll.
+  // Wake the process-local worker immediately. If the polling loop is disabled
+  // by deployment configuration, a user submission still gets one safe forced
+  // run; durable queue recovery remains available on the next instance startup.
   if (ALWAYS_ON_WORKER_ENABLED) void processNextWorkforceJob();
+  else if (process.env.NODE_ENV !== 'test') void processNextWorkforceJob(true);
   return { ...workroomSnapshot(task), queued: true, worker_enabled: ALWAYS_ON_WORKER_ENABLED, worker_instance: WORKER_INSTANCE_ID };
 }
 
@@ -5354,7 +5368,7 @@ app.post('/api/workforce/workroom', async (req, res) => {
     if (error?.code === 'task_quota_exceeded') return res.status(402).json({ error: error.message, code: error.code, limit: error.limit, usage: error.usage });
     if (error?.code === 'employee_plan_not_approved') return res.status(409).json({ error: error.message, code: error.code, employee_id: error.employee_id, plan: error.plan });
     reportOperationalFailure('task.enqueue', error, { tenant_hash: anonymizeIdentifier(companyId) });
-    return res.status(500).json({ error: 'The task could not be queued safely.' });
+    return res.status(503).json({ error: 'The company-room queue is temporarily unavailable. Please retry in a moment.', code: 'task_queue_unavailable', retryable: true });
   }
 });
 
@@ -5969,7 +5983,6 @@ app.post('/api/task', async (req, res) => {
   const user = getAuthUser(req);
   if (await enforceWorkspaceAccess(req, res)) return;
   const companyId = getUserWorkspaceId(user);
-  if (!ALWAYS_ON_WORKER_ENABLED && process.env.NODE_ENV !== 'test') return res.status(503).json({ error: 'The workforce worker is disabled. Enable ALWAYS_ON_WORKER_ENABLED before assigning tasks.', code: 'worker_disabled', retryable: false });
   const { request: question, preferred_employee_id: preferredEmployeeId, email_employee_id: emailEmployeeId, idempotency_key: idempotencyKey } = req.body || {};
   const normalizedQuestion = String(question || 'Operations review').trim().slice(0, 6000);
   if (!normalizedQuestion) return res.status(400).json({ error: 'A task request is required.' });
@@ -5980,7 +5993,7 @@ app.post('/api/task', async (req, res) => {
     if (error?.code === 'task_quota_exceeded') return res.status(402).json({ error: error.message, code: error.code, limit: error.limit, usage: error.usage });
     if (error?.code === 'employee_plan_not_approved') return res.status(409).json({ error: error.message, code: error.code, employee_id: error.employee_id, plan: error.plan });
     reportOperationalFailure('task.enqueue', error, { tenant_hash: anonymizeIdentifier(companyId) });
-    return res.status(500).json({ error: 'The task could not be queued safely.' });
+    return res.status(503).json({ error: 'The company-room queue is temporarily unavailable. Please retry in a moment.', code: 'task_queue_unavailable', retryable: true });
   }
 });
 
@@ -5988,7 +6001,6 @@ app.post('/api/tasks', async (req, res) => {
   const user = getAuthUser(req);
   if (await enforceWorkspaceAccess(req, res)) return;
   const companyId = getUserWorkspaceId(user);
-  if (!ALWAYS_ON_WORKER_ENABLED && process.env.NODE_ENV !== 'test') return res.status(503).json({ error: 'The workforce worker is disabled. Enable ALWAYS_ON_WORKER_ENABLED before assigning tasks.', code: 'worker_disabled', retryable: false });
   const { request: question, preferred_employee_id: preferredEmployeeId, email_employee_id: emailEmployeeId, idempotency_key: idempotencyKey } = req.body || {};
   const normalizedQuestion = String(question || 'Operations review').trim().slice(0, 6000);
   if (!normalizedQuestion) return res.status(400).json({ error: 'A task request is required.' });
@@ -5999,7 +6011,7 @@ app.post('/api/tasks', async (req, res) => {
     if (error?.code === 'task_quota_exceeded') return res.status(402).json({ error: error.message, code: error.code, limit: error.limit, usage: error.usage });
     if (error?.code === 'employee_plan_not_approved') return res.status(409).json({ error: error.message, code: error.code, employee_id: error.employee_id, plan: error.plan });
     reportOperationalFailure('task.enqueue', error, { tenant_hash: anonymizeIdentifier(companyId) });
-    return res.status(500).json({ error: 'The task could not be queued safely.' });
+    return res.status(503).json({ error: 'The company-room queue is temporarily unavailable. Please retry in a moment.', code: 'task_queue_unavailable', retryable: true });
   }
 });
 

@@ -24,7 +24,7 @@ describe('company-room composer contract', () => {
   it('does not represent an unexpected queue failure as completed work', () => {
     expect(client).toContain("/task could not be queued safely/i");
     expect(client).toContain("error.payload?.code === 'task_queue_unavailable'");
-    expect(client).toContain('Work not started');
-    expect(client).toContain('No agent work was queued');
+    expect(client).toContain('Room queue is retryable');
+    expect(client).toContain('The workforce queue is retryable');
   });
 });
