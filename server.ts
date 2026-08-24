@@ -508,7 +508,14 @@ app.get(['/static/logo.jpeg', '/static/logo.jpg', '/static/logo.svg', '/logo.jpe
 });
 
 // Static assets
-app.use('/static', express.static(path.join(process.cwd(), 'static'), { maxAge: '1d', etag: true, lastModified: true }));
+app.use('/static', express.static(path.join(process.cwd(), 'static'), {
+  maxAge: '1d',
+  etag: true,
+  lastModified: true,
+  setHeaders: (res, filePath) => {
+    if (/\/command\.(css|js)$/.test(filePath)) res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+  }
+}));
 
 // Template engine setup
 app.engine('html', ejs.renderFile);
