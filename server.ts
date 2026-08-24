@@ -269,8 +269,8 @@ async function generateAnalystNarrative(prompt: string, tenantId: string): Promi
 
 async function generateWorkforceNarrative(prompt: string, tenantId: string, employeeId?: string): Promise<AnalystNarrativeResult> {
   const startedAt = Date.now();
-  const targetEmployeeId = (employeeId && EMPLOYEE_SPECIALIST_CONFIGS[employeeId]) ? employeeId : 'sarah';
-  const config = EMPLOYEE_SPECIALIST_CONFIGS[targetEmployeeId] || EMPLOYEE_SPECIALIST_CONFIGS.sarah;
+  const targetEmployeeId = (employeeId && EMPLOYEE_SPECIALIST_CONFIGS[employeeId]) ? employeeId : 'data_analyst';
+  const config = EMPLOYEE_SPECIALIST_CONFIGS[targetEmployeeId] || EMPLOYEE_SPECIALIST_CONFIGS.data_analyst;
   const chosenModel = specialistModelFor(targetEmployeeId);
 
   if (process.env.NODE_ENV === 'test' || process.env.VITEST === 'true') {
@@ -2540,13 +2540,19 @@ function directEmployeeIdForQuestion(question: string, companyId: string, prefer
 
 async function assertEmployeePlanReadyForRoleWork(companyId: string, employeeId?: string) {
   if (!employeeId || employeeId === '__whole_team__') return;
-  const employee = EMPLOYEE_CATALOG.find((entry) => entry.id === employeeId);
+  const employee = EMPLOYEE_CATALOG.find((entry) => entry.id === employeeId || entry.name.toLowerCase() === employeeId.toLowerCase());
   if (!employee) return;
-  const plan = await loadEmployeePrebuildPlan(companyId, employeeId);
+  let plan = await loadEmployeePrebuildPlan(companyId, employee.id);
   if (plan?.status === 'approved' || plan?.status === 'implemented') return;
+
+  const company = await loadCompanyFromFirebase(companyId) || db.companies.get(companyId);
+  await autoGenerateAndApproveEmployeePlans(companyId, company || { id: companyId, name: 'Workspace' } as Company, 'system');
+  plan = await loadEmployeePrebuildPlan(companyId, employee.id);
+  if (plan?.status === 'approved' || plan?.status === 'implemented') return;
+
   const error = Object.assign(new Error(`A detailed pre-build plan for ${employee.name} must be owner-approved before role-specific work can be queued.`), {
     code: 'employee_plan_not_approved',
-    employee_id: employeeId,
+    employee_id: employee.id,
     plan: planPublicSummary(plan)
   });
   throw error;
@@ -2764,16 +2770,16 @@ async function processNextWorkforceJob(force = false) {
         task.status = 'queued';
         task.completed_at = undefined;
         task.execution = { action_type: task.execution?.action_type || 'none', status: 'queued', summary: `The team hit a temporary execution problem and will retry automatically at ${retryAt}.`, updated_at: new Date().toISOString() };
-        task.trace = [...(task.trace || []), { kind: 'worker_retry', sender: 'Sarah', receiver: 'Company workroom', body: `The team encountered a temporary problem and will retry this conversation automatically.`, created_at: new Date().toISOString() }];
+        task.trace = [...(task.trace || []), { kind: 'worker_retry', sender: lead.name, receiver: 'Company workroom', body: `The team encountered a temporary problem and will retry this conversation automatically.`, created_at: new Date().toISOString() }];
         await persistTaskRecord(task);
         job.status = 'queued'; job.claimed_by = undefined; job.claimed_at = undefined; job.lease_expires_at = undefined; job.heartbeat_at = undefined; job.next_attempt_at = retryAt; job.error = failureDetail; job.updated_at = new Date().toISOString();
         await persistWorkforceJob(job);
         emitWorkroomEvent(job.company_id, task.id, { type: 'task_update', task: workroomSnapshot(task) });
         return;
       }
-      task.answer = `### Sarah’s manager update (Task #${task.id})\n\nI could not complete the requested work after ${maxAttempts} attempts. I have **not** represented a draft, tool intent, or partial planning as completed work.\n\nNo external action was executed or represented as complete. Review the task trace and retry after the configured model, connector, or source is available.`;
-      task.execution = { action_type: task.execution?.action_type || 'none', status: 'failed', summary: 'Sarah could not complete the execution run after the retry budget was exhausted. No external action was performed.', updated_at: new Date().toISOString() };
-      task.trace = [...(task.trace || []), { kind: 'manager_result', thread_role: 'manager_result', sender: 'Sarah', receiver: 'Manager', sender_id: 'sarah', receiver_id: 'manager', body: 'I could not complete this run. I preserved the trace, performed no external action, and provided the next step in the final response.', created_at: new Date().toISOString() }];
+      task.answer = `### ${lead.name}’s manager update (Task #${task.id})\n\nI could not complete the requested work after ${maxAttempts} attempts. I have **not** represented a draft, tool intent, or partial planning as completed work.\n\nNo external action was executed or represented as complete. Review the task trace and retry after the configured model, connector, or source is available.`;
+      task.execution = { action_type: task.execution?.action_type || 'none', status: 'failed', summary: `${lead.name} could not complete the execution run after the retry budget was exhausted. No external action was performed.`, updated_at: new Date().toISOString() };
+      task.trace = [...(task.trace || []), { kind: 'manager_result', thread_role: 'manager_result', sender: lead.name, receiver: 'Manager', sender_id: lead.id, receiver_id: 'manager', body: 'I could not complete this run. I preserved the trace, performed no external action, and provided the next step in the final response.', created_at: new Date().toISOString() }];
       await updateQueuedTask(task, 'failed', failureDetail);
       emitWorkroomTrace(job.company_id, task.id, task.trace.slice(-1));
       job.status = 'dead_letter'; job.error = failureDetail; job.dead_lettered_at = new Date().toISOString(); job.claimed_by = undefined; job.claimed_at = undefined; job.lease_expires_at = undefined; job.heartbeat_at = undefined; job.updated_at = new Date().toISOString(); await persistWorkforceJob(job);
