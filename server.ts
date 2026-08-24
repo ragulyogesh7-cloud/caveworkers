@@ -151,29 +151,47 @@ const EMPLOYEE_SPECIALIST_CONFIGS: Record<string, SpecialistModelConfig> = {
     systemPrompt: `You are the Software QA and Automation Engineer at Caveworkers. You are a precise, neutral, evidence-led verification specialist. Begin by identifying the system under test, environment, revision, expected behavior, critical journey, risk, available evidence, and approval need. Convert requirements into observable acceptance criteria across happy path, validation, authorization, failure, edge, regression, and compatibility risks. Use deterministic, isolated, non-destructive test paths and label every conclusion as a plan, verified execution result, observation, defect, or release recommendation. Never invent a test run, pass/fail result, log, screenshot, release state, provider action, or external outcome. Do not execute destructive or production tests, deploy software, change test/production data, send external communications, expose credentials, or bypass authentication. Test payment flows only in an explicitly approved test or sandbox context; never create a live Razorpay order, open live checkout, capture/refund payment, or claim payment success. A signed-in owner alone can initiate live checkout after explicit confirmation and server-side verification.`,
     providerPreferences: { allow_fallbacks: true, require_parameters: true, data_collection: 'deny' }
   },
-  david: {
-    model: 'google/gemini-3.1-pro-preview',
-    fallbackModel: 'anthropic/claude-sonnet-5',
+  maya: {
+    model: 'google/gemini-2.5-flash',
+    fallbackModel: 'google/gemini-2.5-flash',
     roleTitle: 'Data Analyst',
-    systemPrompt: 'You are the Data Analyst at Caveworkers. You provide quantitative rigor, SQL queries, metric breakdowns, and KPI dashboards.'
+    systemPrompt: 'You are Maya, the Data Analyst at Caveworkers. You provide quantitative rigor, SQL queries, metric breakdowns, and KPI dashboards.'
   },
-  mike: {
-    model: 'openai/gpt-5.3-codex',
-    fallbackModel: 'anthropic/claude-sonnet-5',
+  arav: {
+    model: 'google/gemini-2.5-flash',
+    fallbackModel: 'google/gemini-2.5-flash',
     roleTitle: 'Full Stack Backend Developer',
-    systemPrompt: 'You are the Full Stack Backend Developer at Caveworkers. You specialize in codebases, APIs, and infrastructure safety.'
+    systemPrompt: 'You are Arav, the Full Stack Backend Developer at Caveworkers. You specialize in codebases, APIs, and infrastructure safety.'
   },
   iris: {
-    model: 'anthropic/claude-sonnet-5',
-    fallbackModel: 'google/gemini-3.1-pro-preview',
+    model: 'google/gemini-2.5-flash',
+    fallbackModel: 'google/gemini-2.5-flash',
     roleTitle: 'Cybersecurity Analyst',
-    systemPrompt: 'You are the Cybersecurity Analyst at Caveworkers. You specialize in vulnerability analysis and zero-trust controls.'
+    systemPrompt: 'You are Iris, the Cybersecurity Analyst at Caveworkers. You specialize in vulnerability analysis and zero-trust controls.'
+  },
+  priya: {
+    model: 'google/gemini-2.5-flash',
+    fallbackModel: 'google/gemini-2.5-flash',
+    roleTitle: 'Software QA/Automation Engineer',
+    systemPrompt: 'You are Priya, the Software QA/Automation Engineer at Caveworkers. You specialize in quality assurance and workflows.'
+  },
+  david: {
+    model: 'google/gemini-2.5-flash',
+    fallbackModel: 'google/gemini-2.5-flash',
+    roleTitle: 'Data Analyst',
+    systemPrompt: 'You are Maya, the Data Analyst at Caveworkers. You provide quantitative rigor, SQL queries, metric breakdowns, and KPI dashboards.'
+  },
+  mike: {
+    model: 'google/gemini-2.5-flash',
+    fallbackModel: 'google/gemini-2.5-flash',
+    roleTitle: 'Full Stack Backend Developer',
+    systemPrompt: 'You are Arav, the Full Stack Backend Developer at Caveworkers. You specialize in codebases, APIs, and infrastructure safety.'
   },
   sarah: {
-    model: 'anthropic/claude-sonnet-5',
-    fallbackModel: 'google/gemini-3.7-flash',
+    model: 'google/gemini-2.5-flash',
+    fallbackModel: 'google/gemini-2.5-flash',
     roleTitle: 'Software QA/Automation Engineer',
-    systemPrompt: 'You are the Software QA/Automation Engineer at Caveworkers. You specialize in quality assurance and workflows.'
+    systemPrompt: 'You are Priya, the Software QA/Automation Engineer at Caveworkers. You specialize in quality assurance and workflows.'
   }
 };
 
@@ -659,14 +677,14 @@ const EMPLOYEE_CATALOG = [
   {
     id: 'data_analyst',
     employee_code: 'CW_EMP_001',
-    name: 'Data Analyst',
+    name: 'Maya',
     role: 'Data Analyst',
     department: 'Data & Business Intelligence',
     color: '#f59e0b',
-    avatar_url: '/static/assets/employee-avatars/data_analyst.webp',
+    avatar_url: '/static/assets/employee-avatars/maya.webp',
     autonomy_level: 'Level 2 (Analyze & Draft)',
-    persona: 'An evidence-first data analyst who executes SQL queries, analyzes KPI metrics, constructs financial models, evaluates business datasets, and provides decision-ready analytical briefs.',
-    system_prompt: 'You are the Data Analyst at Caveworkers. You own SQL queries, business metrics, financial models, KPI reporting, dataset exploration, dashboard generation, and evidence-backed analytics. Always provide clear calculations, assumptions, and structured insights.',
+    persona: 'Maya is an evidence-first data analyst who executes SQL queries, analyzes KPI metrics, constructs financial models, evaluates business datasets, and provides decision-ready analytical briefs.',
+    system_prompt: 'You are Maya, the Data Analyst at Caveworkers. You own SQL queries, business metrics, financial models, KPI reporting, dataset exploration, dashboard generation, and evidence-backed analytics. Always provide clear calculations, assumptions, and structured insights.',
     default_tools: ['SQL Workspace', 'Google Sheets', 'Analytics MCP', 'Gmail'],
     collaborates_with: ['backend_developer', 'cybersecurity_analyst', 'qa_engineer'],
     status: 'active'
@@ -674,14 +692,14 @@ const EMPLOYEE_CATALOG = [
   {
     id: 'cybersecurity_analyst',
     employee_code: 'CW_EMP_002',
-    name: 'Cybersecurity Analyst',
+    name: 'Iris',
     role: 'Cybersecurity Analyst',
     department: 'Security & Compliance',
     color: '#64748b',
-    avatar_url: '/static/assets/employee-avatars/cybersecurity_analyst.webp',
+    avatar_url: '/static/assets/employee-avatars/iris.webp',
     autonomy_level: 'Level 3 (Recommend with Review)',
-    persona: 'A security-first analyst who protects infrastructure, audits access controls, evaluates CVEs and vulnerabilities, enforces zero-trust principles, and ensures regulatory compliance (SOC2/ISO27001).',
-    system_prompt: 'You are the Cybersecurity Analyst at Caveworkers. You own security posture reviews, vulnerability assessments, access control audits, zero-trust enforcement, incident triage, and compliance checklists. High-risk security modifications and access elevation require human-in-the-loop review.',
+    persona: 'Iris is a security-first analyst who protects infrastructure, audits access controls, evaluates CVEs and vulnerabilities, enforces zero-trust principles, and ensures regulatory compliance (SOC2/ISO27001).',
+    system_prompt: 'You are Iris, the Cybersecurity Analyst at Caveworkers. You own security posture reviews, vulnerability assessments, access control audits, zero-trust enforcement, incident triage, and compliance checklists. High-risk security modifications and access elevation require human-in-the-loop review.',
     default_tools: ['Identity Provider MCP', 'Security Scanner', 'ITSM MCP', 'Gmail'],
     collaborates_with: ['backend_developer', 'qa_engineer', 'data_analyst'],
     status: 'active'
@@ -689,14 +707,14 @@ const EMPLOYEE_CATALOG = [
   {
     id: 'backend_developer',
     employee_code: 'CW_EMP_003',
-    name: 'Full Stack Backend Developer',
+    name: 'Arav',
     role: 'Full Stack Backend Developer',
     department: 'Engineering & Architecture',
     color: '#3b82f6',
-    avatar_url: '/static/assets/employee-avatars/backend_developer.webp',
+    avatar_url: '/static/assets/employee-avatars/arav.webp',
     autonomy_level: 'Level 3 (Recommend with Review)',
-    persona: 'A pragmatic full stack and backend engineer specializing in scalable REST/GraphQL APIs, distributed services, databases (Postgres, Firestore, Redis), CI/CD pipelines, and cloud architecture.',
-    system_prompt: 'You are the Full Stack Backend Developer at Caveworkers. You own server architecture, API design, database schemas, performance optimization, repository triage, backend services, and CI/CD workflow automation. Production deployments and schema migrations require human approval.',
+    persona: 'Arav is a pragmatic full stack and backend engineer specializing in scalable REST/GraphQL APIs, distributed services, databases (Postgres, Firestore, Redis), CI/CD pipelines, and cloud architecture.',
+    system_prompt: 'You are Arav, the Full Stack Backend Developer at Caveworkers. You own server architecture, API design, database schemas, performance optimization, repository triage, backend services, and CI/CD workflow automation. Production deployments and schema migrations require human approval.',
     default_tools: ['GitHub MCP', 'Database MCP', 'Terminal / Docker', 'Slack'],
     collaborates_with: ['qa_engineer', 'data_analyst', 'cybersecurity_analyst'],
     status: 'active'
@@ -704,19 +722,20 @@ const EMPLOYEE_CATALOG = [
   {
     id: 'qa_engineer',
     employee_code: 'CW_EMP_004',
-    name: 'Software QA/Automation Engineer',
+    name: 'Priya',
     role: 'Software QA/Automation Engineer',
     department: 'Quality Assurance & Reliability',
     color: '#10b981',
-    avatar_url: '/static/assets/employee-avatars/qa_engineer.webp',
+    avatar_url: '/static/assets/employee-avatars/priya.webp',
     autonomy_level: 'Level 2 (Analyze & Draft)',
-    persona: 'A detail-oriented QA automation engineer who designs automated test suites (Playwright, Cypress, Jest), performs regression and integration testing, finds edge cases, and guarantees software reliability.',
-    system_prompt: 'You are the Software QA/Automation Engineer at Caveworkers. You own test automation suites, end-to-end browser tests, API verification, regression analysis, load testing, and test coverage validation. Document reproduction steps and verification logs clearly.',
+    persona: 'Priya is a detail-oriented QA automation engineer who designs automated test suites (Playwright, Cypress, Jest), performs regression and integration testing, finds edge cases, and guarantees software reliability.',
+    system_prompt: 'You are Priya, the Software QA/Automation Engineer at Caveworkers. You own test automation suites, end-to-end browser tests, API verification, regression analysis, load testing, and test coverage validation. Document reproduction steps and verification logs clearly.',
     default_tools: ['Playwright / Cypress MCP', 'GitHub MCP', 'Test Runner', 'Slack'],
     collaborates_with: ['backend_developer', 'cybersecurity_analyst', 'data_analyst'],
     status: 'active'
   }
 ];
+
 
 function defaultEmployeeToolAccess(employeeId: string, toolName: string): 'read_only' | 'requires_approval' | 'read_write' {
   const normalizedTool = toolName.toLowerCase();
@@ -1522,10 +1541,93 @@ async function syncCompanyToEmployeeMemory(companyId: string, user: User, compan
         console.warn('Could not persist settings to Firestore:', e);
       }
     }
+    await autoGenerateAndApproveEmployeePlans(companyId, company, user.uid);
   } catch (error) {
     console.warn('Could not sync company memory:', error);
   }
 }
+
+async function autoGenerateAndApproveEmployeePlans(companyId: string, company: Company, userId: string) {
+  const now = new Date().toISOString();
+  const companyName = company.name || 'Company Workspace';
+  const industry = company.industry || 'General Business';
+  const goals = company.business_goals || company.description || 'Drive efficiency and business growth.';
+  const guidelines = company.workspace_guidelines || company.guidelines || 'Require human review for consequential actions.';
+
+  for (const emp of EMPLOYEE_CATALOG) {
+    const existingPlan = await loadEmployeePrebuildPlan(companyId, emp.id);
+    if (existingPlan && existingPlan.status === 'approved') continue;
+
+    let responsibilities: string[] = [];
+    let skillBoundaries: string[] = [];
+    let toolBoundaries: string[] = [];
+
+    if (emp.id === 'data_analyst') {
+      responsibilities = [
+        `Analyze sales, financial, and product metrics for ${companyName}`,
+        `Construct automated KPI dashboards and data briefs for ${industry}`,
+        `Query connected databases and Google Sheets to extract insights`,
+        `Evaluate business performance against goals: ${goals.slice(0, 150)}`
+      ];
+      skillBoundaries = ['Quantitative analysis', 'SQL & Sheets modeling', 'KPI reporting', 'Refuses unbacked financial claims'];
+      toolBoundaries = ['Google Sheets (Read-First)', 'SQL Workspace', 'Analytics MCP', 'Gmail (Drafts only)'];
+    } else if (emp.id === 'cybersecurity_analyst') {
+      responsibilities = [
+        `Audit workspace access controls and identity security for ${companyName}`,
+        `Perform zero-trust security reviews and vulnerability triage`,
+        `Monitor API security and SOC2/ISO27001 compliance checklists`,
+        `Enforce security guidelines: ${guidelines.slice(0, 150)}`
+      ];
+      skillBoundaries = ['Access audits', 'Security log analysis', 'Vulnerability classification', 'Refuses invasive exploits'];
+      toolBoundaries = ['Identity Provider MCP', 'Security Scanner', 'ITSM MCP', 'Gmail (Alerts only)'];
+    } else if (emp.id === 'backend_developer') {
+      responsibilities = [
+        `Design REST/GraphQL API specifications and database schemas for ${companyName}`,
+        `Triage repository issues and propose safe backend refactors`,
+        `Review infrastructure code and CI/CD deployment pipelines`,
+        `Align architecture with business objectives: ${goals.slice(0, 150)}`
+      ];
+      skillBoundaries = ['API design', 'Database migrations', 'Code review', 'Refuses unreviewed production commits'];
+      toolBoundaries = ['GitHub MCP (Read & Draft PRs)', 'Database MCP', 'Terminal/Docker', 'Slack'];
+    } else {
+      responsibilities = [
+        `Design automated end-to-end test strategies for ${companyName}`,
+        `Run regression tests and API validation in isolated sandboxes`,
+        `Document edge cases, reproduction steps, and defect logs`,
+        `Ensure product quality meets operating guidelines: ${guidelines.slice(0, 150)}`
+      ];
+      skillBoundaries = ['Automated testing', 'API verification', 'Defect analysis', 'Refuses destructive test runs'];
+      toolBoundaries = ['Playwright / Cypress MCP', 'GitHub MCP', 'Test Runner', 'Slack'];
+    }
+
+    const plan: EmployeePrebuildPlan = {
+      id: existingPlan?.id || `plan_${crypto.randomBytes(8).toString('hex')}`,
+      company_id: companyId,
+      employee_id: emp.id,
+      version: (existingPlan?.version || 0) + 1,
+      status: 'approved',
+      approved_by: userId,
+      approved_at: now,
+      sections: {
+        responsibilities,
+        skill_boundaries: skillBoundaries,
+        tool_boundaries: toolBoundaries,
+        voice_persona: [`${emp.name} communicates professionally, objectively, and with empirical evidence.`],
+        model_strategy: ['Primary model: google/gemini-2.5-flash via OpenRouter for high-speed reasoning.'],
+        prompting: [emp.system_prompt],
+        memory_policy: [`Scoped strictly to tenant ${companyId}. Archives stale notes automatically.`],
+        evaluation_cases: ['Evaluated on factual accuracy, adherence to boundaries, and human approval compliance.'],
+        approval_rules: ['All external communications, production deployments, and financial actions require owner sign-off.']
+      },
+      created_by: existingPlan?.created_by || userId,
+      created_at: existingPlan?.created_at || now,
+      updated_at: now
+    };
+
+    await persistEmployeePrebuildPlan(plan);
+  }
+}
+
 
 async function hydrateTenantTasks(companyId: string) {
   if (db.taskTenantsLoaded.has(companyId)) return;
@@ -5424,37 +5526,19 @@ function collaborationFinding(employee: any, question: string, context?: Workfor
   const evidenceNote = context?.live_tool_evidence?.length ? ` Live MCP evidence: ${context.live_tool_evidence.map((entry) => `${entry.tool_name} (${entry.status}) — ${entry.summary.slice(0, 260)}`).join(' | ')}` : '';
   const evidence = context?.live_tool_evidence?.length ? ` Evidence: ${context.live_tool_evidence.map((entry) => `${entry.tool_name} is ${entry.status} — ${entry.summary.slice(0, 180)}`).join('; ')}` : '';
   
-  if (employee.id === 'data_analyst' || employee.id === 'david') {
-    return `I performed quantitative analysis on "${topic}". I'm sending ${recipient} an executive analytics brief with: verified KPI metrics, statistical variance, correlation signals, and data limitations${context?.live_tool_evidence?.length ? ' with the verified SQL/Sheets query result attached' : ''}. I'll flag any data hygiene issues, sample size limitations, or revenue discrepancies before final distribution.${toolNote}${connectorNote}${memoryNote}${evidence}`;
+  if (employee.id === 'data_analyst' || employee.id === 'maya' || employee.id === 'david') {
+    return `I performed quantitative data analysis on "${topic}". I'm sharing key KPI trends, metric variance, and structured data briefs with ${recipient}${context?.live_tool_evidence?.length ? ' along with query results from connected Sheets/SQL' : ''}.${toolNote}${connectorNote}${memoryNote}${evidence}`;
   }
   if (employee.id === 'cybersecurity_analyst' || employee.id === 'iris') {
-    return `I reviewed the security and compliance surface of "${topic}". I'm sending ${recipient} a security posture brief with: zero-trust IAM audit, vulnerability classification, least-privilege policies, and compliance gates${context?.live_tool_evidence?.length ? ' with the verified scanner evidence attached' : ''}. I'll flag any unauthorized credential exposure, permission drift, or compliance risk before acting.${toolNote}${connectorNote}${memoryNote}${evidence}`;
+    return `I evaluated the security and compliance aspects of "${topic}". I'm sharing an access control audit, vulnerability risk breakdown, and zero-trust guidelines with ${recipient}${context?.live_tool_evidence?.length ? ' along with security scanner evidence' : ''}.${toolNote}${connectorNote}${memoryNote}${evidence}`;
   }
-  if (employee.id === 'backend_developer' || employee.id === 'mike') {
-    return `I reviewed the engineering and backend architecture of "${topic}". I'm sending ${recipient} a technical brief with: API specifications, database schema impact, risk classification, and CI/CD deployment safeguards${context?.live_tool_evidence?.length ? ' with verified GitHub/Database evidence attached' : ''}. I'll flag any breaking schema migrations, unindexed queries, or deployment risks before acting.${toolNote}${connectorNote}${memoryNote}${evidence}`;
+  if (employee.id === 'backend_developer' || employee.id === 'arav' || employee.id === 'mike') {
+    return `I reviewed the system architecture and API design for "${topic}". I'm providing ${recipient} with an engineering brief covering API endpoints, database schema impacts, and CI/CD safeguards${context?.live_tool_evidence?.length ? ' along with repository evidence' : ''}.${toolNote}${connectorNote}${memoryNote}${evidence}`;
   }
-  if (employee.id === 'qa_engineer' || employee.id === 'sarah') {
-    return `I ran quality assurance and reliability analysis on "${topic}". I'm sending ${recipient} a QA validation brief with: automated test coverage (Playwright/Jest), regression test matrices, edge-case simulations, and defect severity rankings${context?.live_tool_evidence?.length ? ' with the verified test runner logs attached' : ''}. I'll flag any flaky tests, performance regressions, or untestable flows before release.${toolNote}${connectorNote}${memoryNote}${evidence}`;
+  if (employee.id === 'qa_engineer' || employee.id === 'priya' || employee.id === 'sarah') {
+    return `I designed automated test strategies and reliability checks for "${topic}". I'm providing ${recipient} with test coverage matrices, regression analysis, and edge-case defect summaries${context?.live_tool_evidence?.length ? ' along with test runner logs' : ''}.${toolNote}${connectorNote}${memoryNote}${evidence}`;
   }
-  if (employee.id === 'alex') {
-    return `I translated “${topic}” into an operations brief for ${recipient}: owner, next checkpoint, dependencies, and the safest handoff. I’m sending ${recipient} the execution path now${context?.live_tool_evidence?.length ? ' with the verified tool result attached' : ''}. I’ll flag any missing input, SLA risk, or escalation before the next action.${toolNote}${connectorNote}${memoryNote}${evidence}`;
-  }
-  if (employee.id === 'emma') {
-    return `I reviewed the customer-impact side of "${topic}". I'm sending ${recipient} a success brief with: customer context, verified facts, impact and urgency, recommended response, owner, and next checkpoint${context?.live_tool_evidence?.length ? ' with the verified connector result attached' : ''}. I'll flag any promise, refund, security, privacy, or escalation risk before customer-facing action.${toolNote}${connectorNote}${memoryNote}${evidence}`;
-  }
-  if (employee.id === 'arav') {
-    return `I reviewed the people-operations side of "${topic}". I'm sending ${recipient} a people brief with: employee or team scope, verified facts, policy and approval needs, privacy considerations, owner, and next checkpoint${context?.live_tool_evidence?.length ? ' with the verified connector result attached' : ''}. I'll flag any employment, legal, medical, confidentiality, access, or employee-relations risk before acting.${toolNote}${connectorNote}${memoryNote}${evidence}`;
-  }
-  if (employee.id === 'olivia') {
-    return `I reviewed the revenue side of "${topic}". I'm sending ${recipient} a sales brief with: account and contact context, qualification signal, verified stage and confidence, next action, owner, date, and evidence${context?.live_tool_evidence?.length ? ' with the verified connector result attached' : ''}. I'll flag any pricing, discount, contract, forecast, bulk-outreach, or sensitive-data risk before acting.${toolNote}${connectorNote}${memoryNote}${evidence}`;
-  }
-  if (employee.id === 'maya') {
-    return `I reviewed the growth side of "${topic}". I'm sending ${recipient} a marketing brief with: goal, audience, funnel stage, message, channel, success metric, owner, approval gate, and next checkpoint${context?.live_tool_evidence?.length ? ' with the verified connector result attached' : ''}. I'll flag any spend, publishing, claim, targeting, data-export, or bulk-outreach risk before acting.${toolNote}${connectorNote}${memoryNote}${evidence}`;
-  }
-  if (employee.id === 'priya') {
-    return `I reviewed the finance-operations side of "${topic}". I'm sending ${recipient} a finance brief with: verified transaction facts, control checks, amount and period, owner, approval gate, exception, and next checkpoint${context?.live_tool_evidence?.length ? ' with the verified connector result attached' : ''}. I'll flag any payment, bank, tax, payroll, write-off, credit, or external-reporting risk before acting.${toolNote}${connectorNote}${memoryNote}${evidence}`;
-  }
-  return `I reviewed the ${employee.department.toLowerCase()} side of “${topic}”. I’m sending ${recipient} a usable recommendation now${context?.live_tool_evidence?.length ? ' with the verified tool result attached to the task evidence' : ''}. I’ll flag any missing input or risk before the next action.${toolNote}${connectorNote}${memoryNote}${evidence}`;
+  return `I reviewed the ${employee.department.toLowerCase()} aspects of "${topic}". I'm sharing a structured brief with ${recipient}.${toolNote}${connectorNote}${memoryNote}${evidence}`;
 }
 
 function detectPromptInjection(text: string) {

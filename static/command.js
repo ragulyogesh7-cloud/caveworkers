@@ -18,15 +18,20 @@ let voiceEnabled = false;
 let availableSpeechVoices = [];
 
 const EMPLOYEE_VOICE_PROFILES = Object.freeze({
+  // ── Active CaveWorkers employees ─────────────────────────────────────────
+  maya:  { label: 'Warm Indian English',    locale: 'en-IN', gender: 'female', hints: ['heera', 'raveena', 'google hindi female'], rate: 0.96, pitch: 1.04 },
+  iris:  { label: 'Precise British English', locale: 'en-GB', gender: 'female', hints: ['serena', 'kate', 'google uk english female'], rate: 0.88, pitch: 0.96 },
+  arav:  { label: 'Clear Australian English', locale: 'en-AU', gender: 'male', hints: ['lee', 'google australian english'], rate: 0.93, pitch: 0.91 },
+  priya: { label: 'Natural Indian English',  locale: 'en-IN', gender: 'female', hints: ['heera', 'samantha', 'google hindi female'], rate: 0.98, pitch: 1.02 },
+  // ── Legacy role-based stubs (kept as fallbacks) ───────────────────────────
   data_analyst: { label: 'Measured British English', locale: 'en-GB', gender: 'male', hints: ['george', 'daniel', 'google uk english male'], rate: 0.91, pitch: 0.92 },
   cybersecurity_analyst: { label: 'Precise British English', locale: 'en-GB', gender: 'female', hints: ['serena', 'kate', 'google uk english female'], rate: 0.88, pitch: 0.96 },
   backend_developer: { label: 'Clear Australian English', locale: 'en-AU', gender: 'male', hints: ['lee', 'google australian english'], rate: 0.94, pitch: 0.9 },
   qa_engineer: { label: 'Warm Indian English', locale: 'en-IN', gender: 'female', hints: ['heera', 'samantha', 'google us english female'], rate: 0.98, pitch: 1.04 },
   sarah: { label: 'Warm Indian English', locale: 'en-IN', gender: 'female', hints: ['heera', 'samantha', 'google us english female'], rate: 0.98, pitch: 1.04 },
   david: { label: 'Measured British English', locale: 'en-GB', gender: 'male', hints: ['george', 'daniel', 'google uk english male'], rate: 0.91, pitch: 0.92 },
-  alex: { label: 'Calm American English', locale: 'en-US', gender: 'male', hints: ['guy', 'mark', 'google us english'], rate: 0.96, pitch: 0.97 },
-  mike: { label: 'Clear Australian English', locale: 'en-AU', gender: 'male', hints: ['lee', 'google australian english'], rate: 0.94, pitch: 0.9 },
-  iris: { label: 'Precise British English', locale: 'en-GB', gender: 'female', hints: ['serena', 'kate', 'google uk english female'], rate: 0.88, pitch: 0.96 }
+  alex:  { label: 'Calm American English', locale: 'en-US', gender: 'male', hints: ['guy', 'mark', 'google us english'], rate: 0.96, pitch: 0.97 },
+  mike:  { label: 'Clear Australian English', locale: 'en-AU', gender: 'male', hints: ['lee', 'google australian english'], rate: 0.94, pitch: 0.9 },
 });
 
 function getSoundContext() {
