@@ -213,6 +213,28 @@ describe('Caveworkers current workforce and billing invariants', () => {
     }
   }, 30000);
 
+  it('queues a whole-team company-room conversation without pre-build approvals and deduplicates retries', async () => {
+    const payload = { message: 'Please review our release readiness together and tell me the first three risks.', preferred_employee_id: '__whole_team__', idempotency_key: 'room-regression-release-readiness' };
+    const first = await csrfRequest('user-a', 'post', '/api/workforce/workroom').send(payload).expect(202);
+    expect(first.body.queued).toBe(true);
+    expect(first.body.duplicate).toBeUndefined();
+    expect(first.body.direct_employee_id).toBeUndefined();
+    expect(first.body.participants).toEqual(expect.arrayContaining(['Manager', 'Maya', 'Iris', 'Arav', 'Priya']));
+    expect(first.body.collaboration_summary).toContain('leading delivery');
+
+    await workforceTestHooks!.processNextWorkforceJob();
+    const completedTask = db.tasks.get(first.body.id);
+    expect(completedTask?.status).toBe('completed');
+    expect(completedTask?.trace.map((entry: any) => entry.sender)).toEqual(expect.arrayContaining(['Maya', 'Iris', 'Arav', 'Priya']));
+
+    const dialogue = await workforceTestHooks!.handleTaskRoutingAsync(payload.message, 'company-a', '__whole_team__');
+    const speakers = dialogue.trace.map((entry: any) => entry.sender).filter(Boolean);
+    expect(speakers).toEqual(expect.arrayContaining(['Maya', 'Iris', 'Arav', 'Priya']));
+
+    const duplicate = await csrfRequest('user-a', 'post', '/api/workforce/workroom').send(payload).expect(202);
+    expect(duplicate.body).toMatchObject({ duplicate: true, id: first.body.id });
+  });
+
   it('allows a tenant-scoped company-room note without queueing role work, while a direct task remains plan-gated', async () => {
     const response = await csrfRequest('user-a', 'post', '/api/workforce/workroom/messages').send({ message: 'Please keep the next discussion focused on evidence and approval requirements.' }).expect(201);
     expect(response.body.queued).toBe(false);

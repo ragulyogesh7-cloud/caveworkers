@@ -1,5 +1,4 @@
 import dotenv from 'dotenv';
-import { GoogleGenAI } from '@google/genai';
 
 dotenv.config();
 
@@ -33,6 +32,8 @@ export const OAUTH_STATE_SECRET = (process.env.FLASK_SECRET || process.env.OAUTH
 export const GOOGLE_OAUTH_CONFIGURED = Boolean(GOOGLE_OAUTH_CLIENT_ID && GOOGLE_OAUTH_CLIENT_SECRET && GOOGLE_OAUTH_REDIRECT_URI && (!IS_PRODUCTION || OAUTH_STATE_SECRET));
 export const ALWAYS_ON_WORKER_ENABLED = process.env.ALWAYS_ON_WORKER_ENABLED !== 'false';
 export const WORKER_POLL_MS = Math.min(Math.max(Number(process.env.WORKER_POLL_MS || '1500') || 1500, 500), 10000);
+export const WORKER_LEASE_MS = Math.min(Math.max(Number(process.env.WORKER_LEASE_MS || '300000') || 300000, 30_000), 1_800_000);
+export const WORKER_RETRY_BASE_MS = Math.min(Math.max(Number(process.env.WORKER_RETRY_BASE_MS || '5000') || 5000, 1000), 120_000);
 export const WEB_RESEARCH_ENABLED = process.env.WEB_RESEARCH_ENABLED === 'true';
 export const TAVILY_API_KEY = (process.env.TAVILY_API_KEY || '').trim();
 export const BRAVE_SEARCH_API_KEY = (process.env.BRAVE_SEARCH_API_KEY || '').trim();

@@ -22,16 +22,17 @@ import { createHermesAgentRuntime } from './hermes-runtime.js';
 import { createCloudRunIdentityTokenProvider } from './hermes-cloud-run-auth.js';
 import { buildHermesInstructions, getHermesEmployeeContract } from './hermes-contracts.js';
 import { createHermesCapabilityBundle, redactHermesCapabilityTokens } from './hermes-capabilities.js';
+import * as runtimeConfig from './src/config/index.js';
 
 dotenv.config();
 
 const app = express();
 const requestIds = new WeakMap<express.Request, string>();
 function getRequestId(req: express.Request): string { return requestIds.get(req) || 'unavailable'; }
-const PORT = Number(process.env.PORT || '3000') || 3000;
-const HOST = '0.0.0.0';
-const IS_PRODUCTION = process.env.CAVEWORKERS_ENV === 'production';
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '').split(',').map((origin) => origin.trim().replace(/\/$/, '')).filter(Boolean);
+const PORT = runtimeConfig.PORT;
+const HOST = runtimeConfig.HOST;
+const IS_PRODUCTION = runtimeConfig.IS_PRODUCTION;
+const ALLOWED_ORIGINS = runtimeConfig.ALLOWED_ORIGINS;
 if (IS_PRODUCTION && ALLOWED_ORIGINS.length === 0) {
   console.warn('ALLOWED_ORIGINS is empty in production; only same-origin requests will be accepted.');
 }
@@ -61,12 +62,12 @@ if (process.env.GEMINI_API_KEY) {
 
 // David's provider is configurable. OpenRouter/Qwen is preferred in production;
 // Gemini remains a backwards-compatible fallback while a tenant is provisioned.
-const OPENROUTER_API_KEY = (process.env.OPENROUTER_API_KEY || '').trim();
-const OPENROUTER_KEY_READY = Boolean(OPENROUTER_API_KEY && (OPENROUTER_API_KEY.startsWith('sk-or-') || OPENROUTER_API_KEY.length >= 15));
+const OPENROUTER_API_KEY = runtimeConfig.OPENROUTER_API_KEY;
+const OPENROUTER_KEY_READY = runtimeConfig.OPENROUTER_KEY_READY;
 if (OPENROUTER_API_KEY && !OPENROUTER_KEY_READY) console.warn('OPENROUTER_API_KEY is present but invalid; model calls are disabled.');
-const OPENROUTER_BASE_URL = (process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/$/, '');
-const ANALYST_MODEL = process.env.ANALYST_MODEL || 'google/gemini-3.1-pro-preview';
-const WORKFORCE_MODEL_OVERRIDE = (process.env.WORKFORCE_MODEL || '').trim();
+const OPENROUTER_BASE_URL = runtimeConfig.OPENROUTER_BASE_URL;
+const ANALYST_MODEL = runtimeConfig.ANALYST_MODEL;
+const WORKFORCE_MODEL_OVERRIDE = runtimeConfig.WORKFORCE_MODEL_OVERRIDE;
 
 function specialistModelFor(employeeId = 'data_analyst'): string {
   const normalizedId = String(employeeId || 'data_analyst').toLowerCase();
@@ -74,25 +75,27 @@ function specialistModelFor(employeeId = 'data_analyst'): string {
   const employeeOverride = (process.env[`${normalizedId.toUpperCase()}_MODEL`] || '').trim();
   return WORKFORCE_MODEL_OVERRIDE || employeeOverride || config.model;
 }
-const OPENROUTER_TIMEOUT_MS = Math.min(Math.max(Number(process.env.OPENROUTER_TIMEOUT_MS || '30000') || 30000, 5000), 60000);
-const ANALYST_MAX_TOKENS = Math.min(Math.max(Number(process.env.ANALYST_MAX_TOKENS || '900') || 900, 128), 2000);
-const PUBLIC_APP_URL = (process.env.PUBLIC_APP_URL || 'https://caveworkers.ai.studio').replace(/\/$/, '');
-const GOOGLE_OAUTH_CLIENT_ID = (process.env.GOOGLE_OAUTH_CLIENT_ID || '').trim();
-const GOOGLE_OAUTH_CLIENT_SECRET = (process.env.GOOGLE_OAUTH_CLIENT_SECRET || '').trim();
-const GOOGLE_OAUTH_REDIRECT_URI = (process.env.GOOGLE_OAUTH_REDIRECT_URI || `${PUBLIC_APP_URL}/api/google/oauth/callback`).replace(/\/$/, '');
-const MCP_TOKEN_ENCRYPTION_KEY = (process.env.MCP_TOKEN_ENCRYPTION_KEY || '').trim();
-const COMPANY_EMAIL = (process.env.COMPANY_EMAIL || '').trim().toLowerCase();
-const SMTP_ENABLED = process.env.SMTP_ENABLED === 'true';
-const SMTP_HOST = (process.env.SMTP_HOST || 'smtp.gmail.com').trim();
-const SMTP_PORT = Math.min(Math.max(Number(process.env.SMTP_PORT || '587') || 587, 1), 65535);
-const SMTP_SECURE = process.env.SMTP_SECURE === 'true' || SMTP_PORT === 465;
-const SMTP_USER = (process.env.SMTP_USER || COMPANY_EMAIL).trim().toLowerCase();
-const SMTP_APP_PASSWORD = (process.env.SMTP_APP_PASSWORD || '').trim();
-const SMTP_CONFIGURED = SMTP_ENABLED && Boolean(COMPANY_EMAIL && SMTP_USER && SMTP_APP_PASSWORD && SMTP_USER === COMPANY_EMAIL && SMTP_HOST);
-const OAUTH_STATE_SECRET = (process.env.FLASK_SECRET || process.env.OAUTH_STATE_SECRET || '').trim();
-const GOOGLE_OAUTH_CONFIGURED = Boolean(GOOGLE_OAUTH_CLIENT_ID && GOOGLE_OAUTH_CLIENT_SECRET && GOOGLE_OAUTH_REDIRECT_URI && (!IS_PRODUCTION || OAUTH_STATE_SECRET));
-const ALWAYS_ON_WORKER_ENABLED = process.env.ALWAYS_ON_WORKER_ENABLED !== 'false';
-const WORKER_POLL_MS = Math.min(Math.max(Number(process.env.WORKER_POLL_MS || '1500') || 1500, 500), 10000);
+const OPENROUTER_TIMEOUT_MS = runtimeConfig.OPENROUTER_TIMEOUT_MS;
+const ANALYST_MAX_TOKENS = runtimeConfig.ANALYST_MAX_TOKENS;
+const PUBLIC_APP_URL = runtimeConfig.PUBLIC_APP_URL;
+const GOOGLE_OAUTH_CLIENT_ID = runtimeConfig.GOOGLE_OAUTH_CLIENT_ID;
+const GOOGLE_OAUTH_CLIENT_SECRET = runtimeConfig.GOOGLE_OAUTH_CLIENT_SECRET;
+const GOOGLE_OAUTH_REDIRECT_URI = runtimeConfig.GOOGLE_OAUTH_REDIRECT_URI;
+const MCP_TOKEN_ENCRYPTION_KEY = runtimeConfig.MCP_TOKEN_ENCRYPTION_KEY;
+const COMPANY_EMAIL = runtimeConfig.COMPANY_EMAIL;
+const SMTP_ENABLED = runtimeConfig.SMTP_ENABLED;
+const SMTP_HOST = runtimeConfig.SMTP_HOST;
+const SMTP_PORT = runtimeConfig.SMTP_PORT;
+const SMTP_SECURE = runtimeConfig.SMTP_SECURE;
+const SMTP_USER = runtimeConfig.SMTP_USER;
+const SMTP_APP_PASSWORD = runtimeConfig.SMTP_APP_PASSWORD;
+const SMTP_CONFIGURED = runtimeConfig.SMTP_CONFIGURED;
+const OAUTH_STATE_SECRET = runtimeConfig.OAUTH_STATE_SECRET;
+const GOOGLE_OAUTH_CONFIGURED = runtimeConfig.GOOGLE_OAUTH_CONFIGURED;
+const ALWAYS_ON_WORKER_ENABLED = runtimeConfig.ALWAYS_ON_WORKER_ENABLED;
+const WORKER_POLL_MS = runtimeConfig.WORKER_POLL_MS;
+const WORKER_LEASE_MS = runtimeConfig.WORKER_LEASE_MS;
+const WORKER_RETRY_BASE_MS = runtimeConfig.WORKER_RETRY_BASE_MS;
 const WORKER_INSTANCE_ID = process.env.WORKER_INSTANCE_ID || `worker-${crypto.randomBytes(6).toString('hex')}`;
 const WEB_RESEARCH_ENABLED = process.env.WEB_RESEARCH_ENABLED === 'true';
 const TAVILY_API_KEY = (process.env.TAVILY_API_KEY || '').trim();
@@ -828,6 +831,10 @@ interface WorkforceQueueJob {
   idempotency_key?: string;
   created_at: string;
   updated_at: string;
+  claimed_at?: string;
+  lease_expires_at?: string;
+  heartbeat_at?: string;
+  next_attempt_at?: string;
   dead_lettered_at?: string;
   error?: string;
 }
@@ -1758,7 +1765,11 @@ async function auditWorkforceAction(input: Omit<WorkforceAuditEvent, 'id' | 'cre
     correlation_id: input.correlation_id || crypto.randomUUID(),
     metadata: sanitizeAuditMetadata(input.metadata)
   };
-  await persistAuditEvent(event);
+  try {
+    await persistAuditEvent(event);
+  } catch (error) {
+    reportOperationalFailure('audit.persistence', error, { tenant_hash: anonymizeIdentifier(event.company_id), action: event.action });
+  }
   return event;
 }
 
@@ -1828,18 +1839,46 @@ async function recordUsage(companyId: string, metric: 'tasks_created' | 'tasks_c
   return record;
 }
 
+function taskQuotaError(plan: any, record: UsageLedgerRecord) {
+  return Object.assign(new Error(`The ${plan.name} plan has reached its monthly task limit of ${plan.max_tasks_per_month}. Upgrade or wait for the next usage period.`), {
+    code: 'task_quota_exceeded',
+    status: 402,
+    usage: record,
+    limit: Number(plan.max_tasks_per_month || 0)
+  });
+}
+
+async function reserveTaskQuota(companyId: string) {
+  const plan = companyPlan(companyId);
+  const limit = Number(plan.max_tasks_per_month || 0);
+  const period = usagePeriod();
+  const collection = usageCollection(companyId);
+  if (collection && firestoreDb) {
+    const ref = collection.doc(period);
+    const record = await firestoreDb.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      const current = { company_id: companyId, period, tasks_created: 0, tasks_completed: 0, tool_calls: 0, external_actions: 0, estimated_tokens: 0, updated_at: new Date().toISOString(), ...(snapshot.data() || {}) } as UsageLedgerRecord;
+      if (limit > 0 && current.tasks_created >= limit) throw taskQuotaError(plan, current);
+      const next = { ...current, tasks_created: Number(current.tasks_created || 0) + 1, updated_at: new Date().toISOString() };
+      transaction.set(ref, stripUndefined(next), { merge: true });
+      return next;
+    });
+    db.usage.set(usageLedgerKey(companyId, period), record);
+    return { record, limit, plan };
+  }
+  const record = await loadUsageLedger(companyId, period);
+  if (limit > 0 && record.tasks_created >= limit) throw taskQuotaError(plan, record);
+  record.tasks_created = Number(record.tasks_created || 0) + 1;
+  record.updated_at = new Date().toISOString();
+  await persistUsageLedger(record);
+  return { record, limit, plan };
+}
+
 async function assertTaskQuota(companyId: string) {
   const record = await loadUsageLedger(companyId);
   const plan = companyPlan(companyId);
   const limit = Number(plan.max_tasks_per_month || 0);
-  if (limit > 0 && record.tasks_created >= limit) {
-    const error: any = new Error(`The ${plan.name} plan has reached its monthly task limit of ${limit}. Upgrade or wait for the next usage period.`);
-    error.code = 'task_quota_exceeded';
-    error.status = 402;
-    error.usage = record;
-    error.limit = limit;
-    throw error;
-  }
+  if (limit > 0 && record.tasks_created >= limit) throw taskQuotaError(plan, record);
   return { record, limit, plan };
 }
 
@@ -2260,6 +2299,14 @@ function queueCollection() {
   return firestoreDb?.collection('workforce_jobs') || null;
 }
 
+function workforceIdempotencyCollection(companyId: string) {
+  return analystTenantCollection(companyId, 'workforce_idempotency');
+}
+
+function workforceIdempotencyDocumentId(companyId: string, key: string) {
+  return crypto.createHash('sha256').update(`${companyId}:${key}`).digest('hex');
+}
+
 async function persistWorkforceJob(job: WorkforceQueueJob) {
   db.workforceQueue.set(job.id, job);
   const collection = queueCollection();
@@ -2269,6 +2316,67 @@ async function persistWorkforceJob(job: WorkforceQueueJob) {
     } catch (error) {
       console.warn('Could not persist workforce job to Firestore:', error);
     }
+  }
+}
+
+async function loadTaskById(companyId: string, taskId: number): Promise<TaskRecord | null> {
+  const cached = db.tasks.get(taskId);
+  if (cached?.company_id === companyId) return cached;
+  const collection = analystTenantCollection(companyId, 'tasks');
+  if (!collection) return null;
+  try {
+    const snapshot = await collection.doc(String(taskId)).get();
+    if (!snapshot.exists) return null;
+    const task = { id: taskId, ...(snapshot.data() || {}) } as TaskRecord;
+    if (task.company_id !== companyId) return null;
+    db.tasks.set(task.id, task);
+    return task;
+  } catch (error) {
+    if (!isInitialDatabaseStatusError(error)) reportOperationalFailure('task.idempotency_lookup', error, { tenant_hash: anonymizeIdentifier(companyId), task_id: taskId });
+    return null;
+  }
+}
+
+async function reserveWorkforceIdempotency(companyId: string, key: string, taskId: number): Promise<number | null> {
+  const local = Array.from(db.workforceQueue.values()).find((job) => job.company_id === companyId && job.idempotency_key === key);
+  if (local) return local.task_id;
+  const collection = workforceIdempotencyCollection(companyId);
+  if (!collection || !firestoreDb) return null;
+  const ref = collection.doc(workforceIdempotencyDocumentId(companyId, key));
+  try {
+    return await firestoreDb.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      if (snapshot.exists) {
+        const existingTaskId = Number(snapshot.data()?.task_id);
+        return Number.isFinite(existingTaskId) ? existingTaskId : null;
+      }
+      const now = new Date().toISOString();
+      transaction.create(ref, stripUndefined({ company_id: companyId, idempotency_key: key, task_id: taskId, status: 'reserved', created_at: now, updated_at: now }));
+      return null;
+    });
+  } catch (error) {
+    if (!isInitialDatabaseStatusError(error)) reportOperationalFailure('task.idempotency_reservation', error, { tenant_hash: anonymizeIdentifier(companyId) });
+    throw error;
+  }
+}
+
+async function finalizeWorkforceIdempotency(companyId: string, key: string, taskId: number, status: WorkforceQueueJob['status']) {
+  const collection = workforceIdempotencyCollection(companyId);
+  if (!collection) return;
+  try {
+    await collection.doc(workforceIdempotencyDocumentId(companyId, key)).set({ company_id: companyId, idempotency_key: key, task_id: taskId, status, updated_at: new Date().toISOString() }, { merge: true });
+  } catch (error) {
+    console.warn('Could not finalize workforce idempotency record:', error);
+  }
+}
+
+async function releaseWorkforceIdempotency(companyId: string, key: string) {
+  const collection = workforceIdempotencyCollection(companyId);
+  if (!collection) return;
+  try {
+    await collection.doc(workforceIdempotencyDocumentId(companyId, key)).delete();
+  } catch (error) {
+    console.warn('Could not release stale workforce idempotency record:', error);
   }
 }
 
@@ -2393,9 +2501,10 @@ async function loadQueuedJobs() {
     snapshot.docs.forEach((doc) => {
       const job = { id: doc.id, ...(doc.data() || {}) } as WorkforceQueueJob;
       if (job.status === 'processing' && job.claimed_by !== WORKER_INSTANCE_ID) {
-        const staleAt = Date.now() - 5 * 60 * 1000;
-        if (new Date(job.updated_at || 0).getTime() < staleAt) job.status = 'queued'; else return;
+        const leaseExpired = new Date(job.lease_expires_at || job.updated_at || 0).getTime() <= Date.now();
+        if (leaseExpired) job.status = 'queued'; else return;
       }
+      if (job.status === 'queued' && job.next_attempt_at && new Date(job.next_attempt_at).getTime() > Date.now()) return;
       if (!job.company_id || !Number.isFinite(Number(job.task_id))) return;
       db.workforceQueue.set(job.id, job);
       companyIds.add(job.company_id);
@@ -2432,22 +2541,25 @@ async function assertEmployeePlanReadyForRoleWork(companyId: string, employeeId?
   throw error;
 }
 
-async function enqueueWorkforceTask(companyId: string, question: string, preferredEmployeeId?: string, emailEmployeeId?: string, idempotencyKey?: string) {
+async function enqueueWorkforceTask(companyId: string, question: string, preferredEmployeeId: string = '__whole_team__', emailEmployeeId?: string, idempotencyKey?: string) {
   await loadOrgEmployees(companyId);
   await hydrateTenantTasks(companyId);
   const normalizedIdempotencyKey = String(idempotencyKey || '').trim().slice(0, 160);
+  const requestedTaskId = db.nextTaskId++;
   if (normalizedIdempotencyKey) {
-    const existingJob = Array.from(db.workforceQueue.values()).find((job) => job.company_id === companyId && job.idempotency_key === normalizedIdempotencyKey);
-    if (existingJob) {
-      const existingTask = db.tasks.get(existingJob.task_id);
-      if (existingTask) return { ...workroomSnapshot(existingTask), queued: existingJob.status === 'queued' || existingJob.status === 'processing', duplicate: true, worker_enabled: ALWAYS_ON_WORKER_ENABLED, worker_instance: WORKER_INSTANCE_ID };
+    const existingTaskId = await reserveWorkforceIdempotency(companyId, normalizedIdempotencyKey, requestedTaskId);
+    if (existingTaskId) {
+      const existingTask = await loadTaskById(companyId, existingTaskId);
+      const existingJob = Array.from(db.workforceQueue.values()).find((job) => job.company_id === companyId && job.task_id === existingTaskId);
+      if (existingTask) return { ...workroomSnapshot(existingTask), queued: existingJob?.status === 'queued' || existingJob?.status === 'processing' || existingTask.status === 'queued' || existingTask.status === 'processing', duplicate: true, worker_enabled: ALWAYS_ON_WORKER_ENABLED, worker_instance: WORKER_INSTANCE_ID };
+      await releaseWorkforceIdempotency(companyId, normalizedIdempotencyKey);
     }
   }
-  await assertTaskQuota(companyId);
-  const taskId = db.nextTaskId++;
-  const now = new Date().toISOString();
   const routedEmployeeId = directEmployeeIdForQuestion(question || 'Operations review', companyId, preferredEmployeeId) || (preferredEmployeeId === '__whole_team__' ? '__whole_team__' : undefined);
   await assertEmployeePlanReadyForRoleWork(companyId, routedEmployeeId);
+  await reserveTaskQuota(companyId);
+  const taskId = requestedTaskId;
+  const now = new Date().toISOString();
   const validEmailEmployeeId = typeof emailEmployeeId === 'string' && activeWorkforce(companyId).some((employee) => employee.id === emailEmployeeId) ? emailEmployeeId : undefined;
   const { manager, lead, collaborators } = selectCollaborativeTeam(question || 'Operations review', companyId, routedEmployeeId);
   const isDirect = Boolean(routedEmployeeId && routedEmployeeId !== '__whole_team__');
@@ -2479,8 +2591,8 @@ async function enqueueWorkforceTask(companyId: string, question: string, preferr
 	 attempts: 0, max_attempts: 3, idempotency_key: normalizedIdempotencyKey || `${companyId}:${taskId}`, created_at: now, updated_at: now };
 
   await persistWorkforceJob(job);
+  if (normalizedIdempotencyKey) await finalizeWorkforceIdempotency(companyId, normalizedIdempotencyKey, taskId, job.status);
   try {
-    await recordUsage(companyId, 'tasks_created');
     await recordActivationEvent(companyId, 'first_task_created', 'user', 'workspace-manager', { task_id: taskId });
   } catch (error) {
     reportOperationalFailure('usage.task_created', error, { tenant_hash: anonymizeIdentifier(companyId), task_id: taskId });
@@ -2495,7 +2607,7 @@ async function enqueueWorkforceTask(companyId: string, question: string, preferr
 
 async function claimNextWorkforceJob(): Promise<WorkforceQueueJob | null> {
   await loadQueuedJobs();
-  const candidates = Array.from(db.workforceQueue.values()).filter((job) => job.status === 'queued').sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  const candidates = Array.from(db.workforceQueue.values()).filter((job) => job.status === 'queued' && (!job.next_attempt_at || new Date(job.next_attempt_at).getTime() <= Date.now())).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
   for (const candidate of candidates) {
     const collection = queueCollection();
     if (collection) {
@@ -2504,8 +2616,10 @@ async function claimNextWorkforceJob(): Promise<WorkforceQueueJob | null> {
           const ref = collection.doc(candidate.id);
           const snapshot = await transaction.get(ref);
           const current = snapshot.exists ? { id: candidate.id, ...(snapshot.data() || {}) } as WorkforceQueueJob : candidate;
-          if (current.status !== 'queued') return null;
-          const next = { ...current, status: 'processing' as const, claimed_by: WORKER_INSTANCE_ID, attempts: Number(current.attempts || 0) + 1, updated_at: new Date().toISOString() };
+          const leaseExpired = current.status === 'processing' && new Date(current.lease_expires_at || current.updated_at || 0).getTime() <= Date.now();
+          if (current.status !== 'queued' && !leaseExpired) return null;
+          const now = new Date().toISOString();
+          const next = { ...current, status: 'processing' as const, claimed_by: WORKER_INSTANCE_ID, attempts: Number(current.attempts || 0) + 1, claimed_at: now, heartbeat_at: now, lease_expires_at: new Date(Date.now() + WORKER_LEASE_MS).toISOString(), next_attempt_at: undefined, updated_at: now };
           transaction.set(ref, stripUndefined(next), { merge: true });
           return next;
         });
@@ -2516,15 +2630,53 @@ async function claimNextWorkforceJob(): Promise<WorkforceQueueJob | null> {
         }
       }
     } else {
+      const now = new Date().toISOString();
       candidate.status = 'processing';
       candidate.claimed_by = WORKER_INSTANCE_ID;
       candidate.attempts += 1;
-      candidate.updated_at = new Date().toISOString();
+      candidate.claimed_at = now;
+      candidate.heartbeat_at = now;
+      candidate.lease_expires_at = new Date(Date.now() + WORKER_LEASE_MS).toISOString();
+      candidate.next_attempt_at = undefined;
+      candidate.updated_at = now;
       db.workforceQueue.set(candidate.id, candidate);
       return candidate;
     }
   }
   return null;
+}
+
+async function renewWorkforceJobLease(job: WorkforceQueueJob): Promise<boolean> {
+  const now = new Date().toISOString();
+  const collection = queueCollection();
+  if (!collection || !firestoreDb) {
+    job.heartbeat_at = now;
+    job.lease_expires_at = new Date(Date.now() + WORKER_LEASE_MS).toISOString();
+    job.updated_at = now;
+    db.workforceQueue.set(job.id, job);
+    return true;
+  }
+  try {
+    const renewed = await firestoreDb.runTransaction(async (transaction) => {
+      const ref = collection.doc(job.id);
+      const snapshot = await transaction.get(ref);
+      const current = snapshot.exists ? { id: job.id, ...(snapshot.data() || {}) } as WorkforceQueueJob : job;
+      if (current.status !== 'processing' || current.claimed_by !== WORKER_INSTANCE_ID) return false;
+      const next = { ...current, heartbeat_at: now, lease_expires_at: new Date(Date.now() + WORKER_LEASE_MS).toISOString(), updated_at: now };
+      transaction.set(ref, stripUndefined(next), { merge: true });
+      return true;
+    });
+    if (renewed) {
+      job.heartbeat_at = now;
+      job.lease_expires_at = new Date(Date.now() + WORKER_LEASE_MS).toISOString();
+      job.updated_at = now;
+      db.workforceQueue.set(job.id, job);
+    }
+    return renewed;
+  } catch (error) {
+    if (!isInitialDatabaseStatusError(error)) reportOperationalFailure('worker.job_heartbeat', error, { job_hash: anonymizeIdentifier(job.id) });
+    return false;
+  }
 }
 
 async function updateQueuedTask(task: TaskRecord, status: TaskRecord['status'], body: string) {
@@ -2545,12 +2697,17 @@ async function processNextWorkforceJob(force = false) {
     if (!job) return;
     const task = db.tasks.get(job.task_id);
     if (!task || task.company_id !== job.company_id) {
-      job.status = 'failed'; job.error = 'Tenant task record was not found.'; job.updated_at = new Date().toISOString(); await persistWorkforceJob(job); return;
+      job.status = 'dead_letter'; job.error = 'Tenant task record was not found.'; job.dead_lettered_at = new Date().toISOString(); job.claimed_by = undefined; job.claimed_at = undefined; job.lease_expires_at = undefined; job.heartbeat_at = undefined; job.updated_at = new Date().toISOString(); await persistWorkforceJob(job);
+      if (job.idempotency_key) await finalizeWorkforceIdempotency(job.company_id, job.idempotency_key, job.task_id, job.status);
+      return;
     }
     const { manager, lead, collaborators } = selectCollaborativeTeam(job.question, job.company_id, job.preferred_employee_id);
     const workerEmployees = [...new Set([manager.id, lead.id, ...collaborators.map((employee) => employee.id)])];
     workerEmployees.forEach((employeeId) => setEmployeePresence(job.company_id, employeeId, 'working', task.id));
     await updateQueuedTask(task, 'processing', job.preferred_employee_id && job.preferred_employee_id !== '__whole_team__' ? `${lead.name} is working directly on this request with the tenant-approved tools and memory.` : `${manager.name} is managing this task. ${lead.name} and the assigned specialists are now working in the company room.`);
+    let leaseTimer: NodeJS.Timeout | undefined;
+    leaseTimer = setInterval(() => { void renewWorkforceJobLease(job); }, Math.max(10_000, Math.floor(WORKER_LEASE_MS / 3)));
+    leaseTimer.unref?.();
     try {
       const completed = await handleTaskRoutingAsync(job.question, job.company_id, job.preferred_employee_id, task.id, job.email_employee_id);
       Object.assign(task, completed);
@@ -2561,15 +2718,20 @@ async function processNextWorkforceJob(force = false) {
         await persistTaskRecord(task);
         job.status = 'queued';
         job.claimed_by = undefined;
+        job.claimed_at = undefined;
+        job.lease_expires_at = undefined;
+        job.heartbeat_at = undefined;
         job.updated_at = new Date().toISOString();
         await persistWorkforceJob(job);
+        if (job.idempotency_key) await finalizeWorkforceIdempotency(job.company_id, job.idempotency_key, job.task_id, job.status);
         emitWorkroomEvent(job.company_id, task.id, { type: 'task_update', task: workroomSnapshot(task) });
         return;
       }
       task.completed_at = new Date().toISOString();
       await persistTaskRecord(task);
       emitWorkroomTrace(job.company_id, task.id, task.trace || []);
-      job.status = 'completed'; job.updated_at = new Date().toISOString(); await persistWorkforceJob(job);
+      job.status = 'completed'; job.claimed_by = undefined; job.lease_expires_at = undefined; job.heartbeat_at = undefined; job.updated_at = new Date().toISOString(); await persistWorkforceJob(job);
+      if (job.idempotency_key) await finalizeWorkforceIdempotency(job.company_id, job.idempotency_key, job.task_id, job.status);
       if (task.status === 'completed') {
         try {
           await recordUsage(job.company_id, 'tasks_completed');
@@ -2582,13 +2744,28 @@ async function processNextWorkforceJob(force = false) {
     } catch (error: any) {
       reportOperationalFailure('worker.task_execution', error, { tenant_hash: anonymizeIdentifier(job.company_id), task_id: task.id, worker_instance: WORKER_INSTANCE_ID });
       const failureDetail = String(error?.message || 'Worker execution failed').slice(0, 300);
-      task.answer = `### Sarah’s manager update (Task #${task.id})\n\nI could not complete the requested work because the execution service returned a recoverable failure. I have **not** represented a draft, tool intent, or partial planning as completed work.\n\n**What I completed**\n- Recorded the task, assigned delivery ownership, and preserved the workroom trace.\n- Stopped any external action; no email, write, payment, or account change was performed.\n\n**Next action**\nRetry this task after the configured model, connector, or source is available. If the problem persists, review the connection state in Settings and share the task trace with support.`;
-      task.execution = { action_type: task.execution?.action_type || 'none', status: 'failed', summary: 'Sarah could not complete the execution run. No external action was performed.', updated_at: new Date().toISOString() };
+      const maxAttempts = Math.max(1, Number(job.max_attempts || 3));
+      if (job.attempts < maxAttempts) {
+        const retryAt = new Date(Date.now() + WORKER_RETRY_BASE_MS * (2 ** Math.max(0, job.attempts - 1))).toISOString();
+        task.status = 'queued';
+        task.completed_at = undefined;
+        task.execution = { action_type: task.execution?.action_type || 'none', status: 'queued', summary: `The team hit a temporary execution problem and will retry automatically at ${retryAt}.`, updated_at: new Date().toISOString() };
+        task.trace = [...(task.trace || []), { kind: 'worker_retry', sender: 'Sarah', receiver: 'Company workroom', body: `The team encountered a temporary problem and will retry this conversation automatically.`, created_at: new Date().toISOString() }];
+        await persistTaskRecord(task);
+        job.status = 'queued'; job.claimed_by = undefined; job.claimed_at = undefined; job.lease_expires_at = undefined; job.heartbeat_at = undefined; job.next_attempt_at = retryAt; job.error = failureDetail; job.updated_at = new Date().toISOString();
+        await persistWorkforceJob(job);
+        emitWorkroomEvent(job.company_id, task.id, { type: 'task_update', task: workroomSnapshot(task) });
+        return;
+      }
+      task.answer = `### Sarah’s manager update (Task #${task.id})\n\nI could not complete the requested work after ${maxAttempts} attempts. I have **not** represented a draft, tool intent, or partial planning as completed work.\n\nNo external action was executed or represented as complete. Review the task trace and retry after the configured model, connector, or source is available.`;
+      task.execution = { action_type: task.execution?.action_type || 'none', status: 'failed', summary: 'Sarah could not complete the execution run after the retry budget was exhausted. No external action was performed.', updated_at: new Date().toISOString() };
       task.trace = [...(task.trace || []), { kind: 'manager_result', thread_role: 'manager_result', sender: 'Sarah', receiver: 'Manager', sender_id: 'sarah', receiver_id: 'manager', body: 'I could not complete this run. I preserved the trace, performed no external action, and provided the next step in the final response.', created_at: new Date().toISOString() }];
       await updateQueuedTask(task, 'failed', failureDetail);
       emitWorkroomTrace(job.company_id, task.id, task.trace.slice(-1));
-      job.status = 'failed'; job.error = failureDetail; job.updated_at = new Date().toISOString(); await persistWorkforceJob(job);
+      job.status = 'dead_letter'; job.error = failureDetail; job.dead_lettered_at = new Date().toISOString(); job.claimed_by = undefined; job.claimed_at = undefined; job.lease_expires_at = undefined; job.heartbeat_at = undefined; job.updated_at = new Date().toISOString(); await persistWorkforceJob(job);
+      if (job.idempotency_key) await finalizeWorkforceIdempotency(job.company_id, job.idempotency_key, job.task_id, job.status);
     } finally {
+      if (leaseTimer) clearInterval(leaseTimer);
       workerEmployees.forEach((employeeId) => setEmployeePresence(job.company_id, employeeId, 'idle'));
     }
   } catch (error) {
@@ -5171,7 +5348,7 @@ app.post('/api/workforce/workroom', async (req, res) => {
   const workroomMessage = String(req.body?.message || '').trim().slice(0, 6000);
   if (!workroomMessage) return res.status(400).json({ error: 'A company workroom message is required.' });
   try {
-    const result = await enqueueWorkforceTask(companyId, workroomMessage, typeof req.body?.preferred_employee_id === 'string' ? req.body.preferred_employee_id : undefined, typeof req.body?.email_employee_id === 'string' ? req.body.email_employee_id : undefined);
+    const result = await enqueueWorkforceTask(companyId, workroomMessage, typeof req.body?.preferred_employee_id === 'string' ? req.body.preferred_employee_id : '__whole_team__', typeof req.body?.email_employee_id === 'string' ? req.body.email_employee_id : undefined, typeof req.body?.idempotency_key === 'string' ? req.body.idempotency_key : undefined);
     res.status(202).json(result);
   } catch (error: any) {
     if (error?.code === 'task_quota_exceeded') return res.status(402).json({ error: error.message, code: error.code, limit: error.limit, usage: error.usage });

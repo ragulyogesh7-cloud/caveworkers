@@ -407,8 +407,8 @@ function renderAssignmentOptions() {
   const select = $('#task-assignee');
   if (!select) return;
   const current = select.value;
-  select.innerHTML = `<option value="">Auto-route the best team</option><option value="__whole_team__">Whole team</option>${employees.map((employee) => `<option value="${safe(employee.id)}">${safe(employee.name)} · ${safe(employee.role)}</option>`).join('')}`;
-  select.value = Array.from(select.options).some((option) => option.value === current) ? current : '';
+  select.innerHTML = `<option value="__whole_team__">Whole team conversation</option>${employees.map((employee) => `<option value="${safe(employee.id)}">${safe(employee.name)} · ${safe(employee.role)}</option>`).join('')}`;
+  select.value = Array.from(select.options).some((option) => option.value === current) ? current : '__whole_team__';
 }
 
 function renderAvatarStack() {
@@ -751,7 +751,7 @@ async function submitTask(event) {
   if (!request) { input?.focus(); return; }
   const selectedPreferred = select?.value || '';
   const mentioned = !selectedPreferred ? mentionedEmployeeId(request) : '';
-  const preferred = selectedPreferred || mentioned;
+  const preferred = selectedPreferred || mentioned || '__whole_team__';
   const target = preferred === '__whole_team__' ? 'the whole team' : employeeById(preferred)?.name || 'the best available specialist';
   const leadName = employees[0]?.name || 'Your AI Team';
   const leadId = employees[0]?.id || 'data_analyst';
@@ -765,7 +765,8 @@ async function submitTask(event) {
   setExecutionLive('working', 'Routing your outcome', preferred && preferred !== '__whole_team__' ? `${target} is preparing a direct response.` : `Preparing the workforce for ${target}.`);
   setRoomNotice(preferred && preferred !== '__whole_team__' ? `Speaking with ${target} directly.` : `Routing this task to ${target}.`, '');
   try {
-    const task = await responseJson('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request, preferred_employee_id: preferred || undefined }) });
+    const idempotencyKey = `room:${crypto.randomUUID()}`;
+    const task = await responseJson('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request, preferred_employee_id: preferred, idempotency_key: idempotencyKey }) });
     pendingMessages = pendingMessages.filter((entry) => entry !== pending);
     const existingTask = workroomTasks.find((entry) => entry.id === task.id);
     if (!existingTask) workroomTasks.push(task);
@@ -793,18 +794,19 @@ async function submitRoomNote() {
   const button = $('#send-note');
   const message = input?.value.trim();
   if (!message) { input?.focus(); return; }
-  if (button) { button.disabled = true; button.textContent = 'Sending…'; }
+  if (button) { button.disabled = true; button.textContent = 'Starting…'; }
   try {
-    const result = await responseJson('/api/workforce/workroom/messages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message }) });
+    const task = await responseJson('/api/workforce/workroom', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message, preferred_employee_id: '__whole_team__', idempotency_key: `room:${crypto.randomUUID()}` }) });
     input.value = '';
-    const posted = result.message;
-    if (posted && !workroomGeneralMessages.some((entry) => messageKey(entry) === messageKey(posted))) workroomGeneralMessages.push(posted);
+    const existingTask = workroomTasks.find((entry) => entry.id === task.id);
+    if (!existingTask) workroomTasks.push(task);
     rebuildWorkroomMessages();
-    setRoomNotice('Your note was shared with the company room. No agent work was started.', 'success');
+    setRoomNotice(`The whole team is discussing Task #${task.id} in the company room.`, 'success');
+    void Promise.all([loadTaskSummaries(), loadApprovals()]);
   } catch (error) {
-    setRoomNotice(error.message || 'The company-room note could not be sent.', 'error');
+    setRoomNotice(error.upgradeRequired ? `${error.message} Open Settings to choose a paid plan.` : error.message || 'The team could not be started. Please retry.', 'error');
   } finally {
-    if (button) { button.disabled = false; button.textContent = 'Send note'; }
+    if (button) { button.disabled = false; button.textContent = 'Send to team'; }
     input?.focus();
   }
 }

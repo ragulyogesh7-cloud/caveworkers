@@ -9,7 +9,8 @@
     "test": "vitest run",
     "build": "tsc -p tsconfig.build.json",
     "start": "node --import ./dist/instrument.js dist/server.js",
-    "start:hermes-bridge": "node dist/hermes-bridge.js"
+    "start:hermes-bridge": "node dist/hermes-bridge.js",
+    "check:deployment": "bash scripts/verify-cloudbuild-manifests.sh"
   },
   "dependencies": {
     "@google/genai": "^2.16.0",
