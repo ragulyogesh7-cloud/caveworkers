@@ -5759,7 +5759,7 @@ async function handleTaskRoutingAsync(question: string, companyId: string, prefe
       id: blockedTaskId,
       company_id: companyId,
       question: String(question || '').slice(0, 6000),
-      owner: 'sarah',
+      owner: EMPLOYEE_CATALOG[0]?.id || 'data_analyst',
       status: 'failed',
       answer: 'I could not execute this request because it attempts to override security controls or expose protected credentials.',
       plan: 'Safety review → blocked before external tool access',

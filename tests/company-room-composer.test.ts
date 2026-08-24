@@ -7,17 +7,12 @@ const styles = readFileSync(resolve(process.cwd(), 'static/command.css'), 'utf8'
 const client = readFileSync(resolve(process.cwd(), 'static/command.js'), 'utf8');
 
 describe('company-room composer contract', () => {
-  it('defaults the room to a natural whole-team conversation and keeps both composer actions available', () => {
-    expect(template).toContain('id="send-note"');
+  it('defaults the room to a natural whole-team conversation with single primary action', () => {
     expect(template).toContain('id="run"');
-    expect(template).toContain('Whole team conversation');
-    expect(template).toContain('Maya, Iris, Arav, and Priya');
-    expect(styles).toContain('.room-note-button');
-    expect(styles).toContain('grid-template-columns: auto auto');
-    expect(styles).toContain('grid-template-columns: 1fr 1fr');
+    expect(template).not.toContain('id="send-note"');
+    expect(template).toContain('Whole team');
     expect(client).toContain("/api/workforce/workroom");
-    expect(client).toContain("/api/tasks");
-    expect(client).toContain("preferred_employee_id: '__whole_team__'");
+    expect(client).toContain('preferred_employee_id: preferred');
     expect(client).toContain('idempotency_key');
   });
 

@@ -790,28 +790,6 @@ async function submitTask(event) {
   }
 }
 
-async function submitRoomNote() {
-  const input = $('#request');
-  const button = $('#send-note');
-  const message = input?.value.trim();
-  if (!message) { input?.focus(); return; }
-  if (button) { button.disabled = true; button.textContent = 'Starting…'; }
-  try {
-    const task = await responseJson('/api/workforce/workroom', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message, preferred_employee_id: '__whole_team__', idempotency_key: `room:${crypto.randomUUID()}` }) });
-    input.value = '';
-    const existingTask = workroomTasks.find((entry) => entry.id === task.id);
-    if (!existingTask) workroomTasks.push(task);
-    rebuildWorkroomMessages();
-    setRoomNotice(`The whole team is discussing Task #${task.id} in the company room.`, 'success');
-    void Promise.all([loadTaskSummaries(), loadApprovals()]);
-  } catch (error) {
-    setRoomNotice(error.upgradeRequired ? `${error.message} Open Settings to choose a paid plan.` : error.message || 'The team could not be started. Please retry.', 'error');
-  } finally {
-    if (button) { button.disabled = false; button.textContent = 'Send to team'; }
-    input?.focus();
-  }
-}
-
 
 function roomDirectoryConnectorCard(connector) {
   const connectedEmployees = connector.connected_employee_ids || [];
@@ -1011,7 +989,7 @@ function bindRoomDirectoryInteractions() {
 
 function bindRoomInteractions() {
   $('#room-composer')?.addEventListener('submit', submitTask);
-  $('#send-note')?.addEventListener('click', () => { void submitRoomNote(); });
+  // Send Note button removed — only "Start the work" (#run) submits tasks
   $('#request')?.addEventListener('keydown', (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') $('#room-composer')?.requestSubmit();
   });
