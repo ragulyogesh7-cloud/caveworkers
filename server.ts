@@ -2542,12 +2542,7 @@ async function assertEmployeePlanReadyForRoleWork(companyId: string, employeeId?
   if (!employeeId || employeeId === '__whole_team__') return;
   const employee = EMPLOYEE_CATALOG.find((entry) => entry.id === employeeId || entry.name.toLowerCase() === employeeId.toLowerCase());
   if (!employee) return;
-  let plan = await loadEmployeePrebuildPlan(companyId, employee.id);
-  if (plan?.status === 'approved' || plan?.status === 'implemented') return;
-
-  const company = await loadCompanyFromFirebase(companyId) || db.companies.get(companyId);
-  await autoGenerateAndApproveEmployeePlans(companyId, company || { id: companyId, name: 'Workspace' } as Company, 'system');
-  plan = await loadEmployeePrebuildPlan(companyId, employee.id);
+  const plan = await loadEmployeePrebuildPlan(companyId, employee.id);
   if (plan?.status === 'approved' || plan?.status === 'implemented') return;
 
   const error = Object.assign(new Error(`A detailed pre-build plan for ${employee.name} must be owner-approved before role-specific work can be queued.`), {
