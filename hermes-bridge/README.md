@@ -1,7 +1,0 @@
-# Caveworkers Hermes capability bridge
-
-This is a private, internal-only Streamable HTTP MCP server. It exists because Hermes does not forward trusted per-run tenant metadata to remote MCP tools. The bridge therefore requires two independent controls: a static internal transport bearer and a short-lived, HMAC-signed capability token that binds every call to one tenant, one employee, one task, and one exact tool intent.
-
-The bridge is intentionally narrow. It can provide bounded current-task context, approved employee-scoped memory, or an audit-ready draft artifact persisted under the capability-bound tenant and task. A QA sandbox-test request remains a request only until Caveworkers creates and records the required human approval. The bridge cannot execute connectors, publish artifacts, mutate repositories, run a browser, access a terminal, create live payments, or call Razorpay.
-
-Deploy this container separately from both Caveworkers and Hermes. Keep its Cloud Run ingress set to `internal`; it may use Cloud Run unauthenticated mode only because the Hermes runtime is not a Google IAM client and the internal network boundary plus static bearer are both required. Its dedicated service account needs only Firestore access to the `tenants/*/tasks`, `tenants/*/employee_memory`, `tenants/*/agent_artifacts`, and `hermes_capability_nonces` collections. It must not receive Razorpay, OpenRouter, Firebase Authentication, Gmail, or tenant connector credentials.

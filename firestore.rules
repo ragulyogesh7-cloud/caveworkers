@@ -59,7 +59,7 @@ service cloud.firestore {
     }
 
     // All tenant subcollections—including tasks, approvals, conversations,
-    // memory, audit evidence, connectors, and Hermes draft artifacts—are
+    // memory, audit evidence, and connectors—are
     // readable only by the verified member of the matching company. The
     // Express service uses Firebase Admin and remains the exclusive writer.
     match /tenants/{companyId}/{collection}/{documentId} {

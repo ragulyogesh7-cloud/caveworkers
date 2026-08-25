@@ -4,12 +4,10 @@
   "type": "module",
   "scripts": {
     "dev": "tsx --import ./instrument.ts server.ts",
-    "dev:hermes-bridge": "tsx hermes-bridge.ts",
     "lint": "tsc --noEmit",
     "test": "vitest run",
     "build": "tsc -p tsconfig.build.json",
     "start": "node --import ./dist/instrument.js dist/server.js",
-    "start:hermes-bridge": "node dist/hermes-bridge.js",
     "check:deployment": "bash scripts/verify-cloudbuild-manifests.sh"
   },
   "dependencies": {

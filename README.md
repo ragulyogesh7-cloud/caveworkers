@@ -13,11 +13,9 @@ Caveworkers is a multi-tenant SaaS control plane for a monitored AI workforce. I
 | Identity | Firebase Google sign-in, Firebase Admin ID-token verification, revocation-checked session cookies |
 | Durable system of record | Firestore for verified users, companies, tenant connectors, employee memory, tasks, approvals, activity logs, and workforce jobs when Firebase is configured |
 | Tenant boundary | The verified Firebase user resolves the company ID; tenant collections and API reads/writes are scoped to that company |
-| AI runtime | OpenRouter-compatible model access plus a feature-gated private Hermes Runs API for bounded employee execution |
 | Payments | Razorpay order creation, server-side signature verification, webhook HMAC verification, and trial/plan enforcement |
 | Connectors | Tenant-scoped Gmail, Google Sheets, and HTTPS custom MCP connections with encrypted bearer tokens and per-tool grants |
 | Workforce | Exactly four employee workspaces—Data Analyst, Cybersecurity Analyst, Full Stack Backend Developer, and Software QA/Automation Engineer—with a bounded Firestore-backed worker, task traces, presence, and SSE updates |
-| Hosting | Public Caveworkers Cloud Run service plus separate internal Hermes and capability-bridge Cloud Run services |
 
 The main application entry point is [`server.ts`](server.ts). It currently contains the route layer, middleware, Firebase adapters, employee catalog, connector logic, workroom worker, and payment handlers. The production notes in [`DEPLOYMENT.md`](DEPLOYMENT.md) describe the current single-process worker boundary and the requirements for horizontal scaling.
 
@@ -159,7 +157,6 @@ The checked-in [`.env.example`](.env.example) contains only variables read by th
 | Google connectors | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI` |
 | Connector encryption | `MCP_TOKEN_ENCRYPTION_KEY` |
 | Worker/research | `ALWAYS_ON_WORKER_ENABLED`, `WORKER_POLL_MS`, `WORKER_INSTANCE_ID`, `WEB_RESEARCH_ENABLED`, optional `TAVILY_API_KEY`, `BRAVE_SEARCH_API_KEY` |
-| Private Hermes runtime | `HERMES_ENABLED`, `HERMES_API_URL`, `HERMES_API_KEY`, `HERMES_CLOUD_RUN_AUDIENCE`, `HERMES_MCP_BRIDGE_URL`, `HERMES_MCP_BRIDGE_TOKEN`, `HERMES_CAPABILITY_SIGNING_KEY` |
 
 Use a managed secret store for private values in Cloud Run. Do not copy production secrets into `.env.example`, GitHub Actions logs, browser JavaScript, task payloads, or container build arguments.
 

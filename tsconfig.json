@@ -8,5 +8,11 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["server.ts", "instrument.ts", "security.ts", "mcp-registry.ts", "connector-directory.ts", "hermes-runtime.ts", "hermes-contracts.ts", "hermes-policy.ts", "hermes-cloud-run-auth.ts", "hermes-capabilities.ts", "hermes-bridge.ts"]
+  "include": [
+    "server.ts",
+    "instrument.ts",
+    "security.ts",
+    "mcp-registry.ts",
+    "connector-directory.ts"
+  ]
 }

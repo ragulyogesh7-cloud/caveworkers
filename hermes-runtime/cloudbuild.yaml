@@ -1,9 +1,0 @@
-steps:
-  - name: gcr.io/cloud-builders/docker
-    args:
-      - build
-      - --file=hermes-runtime/Dockerfile
-      - --tag=asia-southeast1-docker.pkg.dev/$PROJECT_ID/caveworkers/hermes-runtime:$COMMIT_SHA
-      - .
-images:
-  - asia-southeast1-docker.pkg.dev/$PROJECT_ID/caveworkers/hermes-runtime:$COMMIT_SHA

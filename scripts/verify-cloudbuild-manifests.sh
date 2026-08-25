@@ -4,7 +4,7 @@ set -euo pipefail
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root_dir"
 
-manifests=(cloudbuild.caveworkers.yaml hermes-bridge/cloudbuild.yaml hermes-runtime/cloudbuild.yaml)
+manifests=(cloudbuild.caveworkers.yaml)
 for manifest in "${manifests[@]}"; do
   while IFS= read -r dockerfile; do
     [[ -z "$dockerfile" ]] && continue
