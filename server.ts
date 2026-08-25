@@ -18,7 +18,8 @@ import { Sentry, anonymizeIdentifier, reportOperationalFailure, sentryEnabled } 
 import { isTrialExpired, verifyRazorpayPaymentSignature, verifyRazorpayWebhookSignature } from './security.js';
 import { getMcpRegistryServer, searchMcpRegistry } from './mcp-registry.js';
 import { CONNECTOR_DIRECTORY_CATEGORIES, CONNECTOR_DIRECTORY_COUNT, connectorDirectoryPublicView, getConnectorDirectoryEntry, searchConnectorDirectory } from './connector-directory.js';
-import { ADK_EMPLOYEE_DEFINITIONS, getAdkEmployeeDefinition, runAdkWorkforce } from './src/adk/workforce.js';
+import { ADK_EMPLOYEE_DEFINITIONS, getAdkEmployeeDefinition, runAdkEngineeringQualityWorkflow, runAdkWorkforce, type AdkToolExecutionRequest, type AdkToolExecutionResult } from './src/adk/workforce.js';
+import { authorizeToolRequest } from './src/adk/tool-gateway.js';
 import * as runtimeConfig from './src/config/index.js';
 
 dotenv.config();
@@ -191,7 +192,9 @@ async function generateAnalystNarrative(prompt: string, tenantId: string): Promi
 
 async function generateWorkforceNarrative(prompt: string, tenantId: string, employeeId?: string, taskId?: number): Promise<AnalystNarrativeResult> {
   const startedAt = Date.now();
-  const adkResult = await runAdkWorkforce({ companyId: tenantId, taskId, preferredEmployeeId: employeeId, prompt });
+  const shouldPairBackendQa = /github|repo|code|bug|fix|release|deploy|api|backend|engineering/i.test(prompt) && /test|qa|quality|verify|regression|release/i.test(prompt);
+  const adkInput = { companyId: tenantId, taskId, preferredEmployeeId: employeeId, prompt, toolExecutor: executeAdkRepositoryTool };
+  const adkResult = shouldPairBackendQa ? await runAdkEngineeringQualityWorkflow(adkInput) : await runAdkWorkforce(adkInput);
   if (adkResult.status === 'completed' && adkResult.text) {
     return { text: adkResult.text, provider: 'google_adk', model: adkResult.model, latency_ms: adkResult.latencyMs, adk_events: adkResult.events };
   }
@@ -2833,6 +2836,74 @@ function buildReadToolArguments(tool: any, question: string): Record<string, any
   return required.every((key: string) => Object.prototype.hasOwnProperty.call(args, key)) ? args : null;
 }
 
+function buildGithubReadToolArguments(tool: any, request: AdkToolExecutionRequest): Record<string, any> | null {
+  const parsed = extractGitHubRepository(request.repository) || String(request.repository || '').match(/^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)$/)?.slice(1).reduce((value, part, index) => ({ ...value, [index === 0 ? 'owner' : 'repo']: part }), {} as { owner: string; repo: string }) || null;
+  if (!parsed) return null;
+  const properties = tool?.inputSchema?.properties && typeof tool.inputSchema.properties === 'object' ? tool.inputSchema.properties : {};
+  const args: Record<string, any> = {};
+  Object.keys(properties).forEach((key) => {
+    const normalized = key.toLowerCase().replace(/[-_]/g, '');
+    if (normalized === 'owner' || normalized === 'organization' || normalized === 'org') args[key] = parsed.owner;
+    else if (normalized === 'repo' || normalized === 'repository' || normalized === 'repositoryname') args[key] = parsed.repo;
+    else if (normalized === 'path' || normalized === 'filepath' || normalized === 'filename') args[key] = request.path || '';
+    else if (normalized === 'ref' || normalized === 'branch' || normalized === 'branchname') args[key] = request.ref || 'main';
+    else if (/query|search|term|text|question|prompt|input|keyword/i.test(key)) args[key] = request.query || `Read ${parsed.owner}/${parsed.repo}${request.path ? `/${request.path}` : ''}`;
+    else if (/limit|maxresults|max_results|count|pagesize/i.test(key)) args[key] = 10;
+  });
+  const required = Array.isArray(tool?.inputSchema?.required) ? tool.inputSchema.required : [];
+  return required.every((key: string) => Object.prototype.hasOwnProperty.call(args, key)) ? args : null;
+}
+
+async function executeAdkRepositoryTool(request: AdkToolExecutionRequest): Promise<AdkToolExecutionResult> {
+  if (request.employeeId !== 'backend_developer' && request.employeeId !== 'qa_engineer') return { status: 'blocked', summary: 'The GitHub repository tool is restricted to Arav and Priya.' };
+  const connections = await loadMcpConnections(request.companyId, request.employeeId);
+  const connection = connections.find((entry) => {
+    if (entry.status !== 'connected' || entry.connection_type !== 'streamable_http' || !entry.auth_token_encrypted) return false;
+    const identity = `${entry.name} ${entry.server_url || ''}`.toLowerCase();
+    return identity.includes('github') || identity.includes('git');
+  });
+  if (!connection) return { status: 'blocked', summary: 'No connected GitHub MCP connector is available for Arav in this workspace.' };
+  const tool = (connection.discovered_tools || []).find((candidate) => {
+    if (candidate.risk === 'write' || isLikelyWriteTool(candidate.name)) return false;
+    return /github|repository|repo|file|content|code|search|read|get/i.test(`${candidate.name} ${candidate.description || ''}`);
+  });
+  if (!tool) return { status: 'blocked', summary: 'The connected GitHub MCP connector has no discovered read-only repository tool.' };
+  const grant = (connection.tool_grants || []).find((entry) => entry.tool_name === tool.name);
+  const gateway = authorizeToolRequest({
+    companyId: request.companyId,
+    requesterCompanyId: request.companyId,
+    employeeId: request.employeeId,
+    connectorEmployeeId: connection.employee_id,
+    connectorId: connection.id,
+    toolName: tool.name,
+    capability: request.capability,
+    action: 'read',
+    environment: process.env.CAVEWORKERS_ENV === 'production' ? 'production' : process.env.CAVEWORKERS_ENV === 'staging' ? 'staging' : 'development',
+    connectorStatus: connection.status,
+    grantAccessLevel: grant?.access_level,
+    toolRisk: tool.risk || 'read',
+    approvalStatus: 'none'
+  });
+  await auditWorkforceAction({ company_id: request.companyId, actor_type: 'employee', actor_id: request.employeeId, action: 'tool.gateway_decision', resource_type: 'connector_tool', resource_id: String(connection.id), connector_id: connection.id, tool_name: tool.name, task_id: request.taskId, risk: 'low', status: gateway.decision === 'ALLOW' ? 'prepared' : 'blocked', summary: `ADK GitHub read request: ${gateway.decision}. ${gateway.reason}`, correlation_id: `adk:${request.taskId || 'conversation'}`, metadata: { capability: request.capability, tenant_checked: gateway.audit.tenant_checked, employee_checked: gateway.audit.employee_checked, connector_checked: gateway.audit.connector_checked, scope_checked: gateway.audit.scope_checked, policy_checked: gateway.audit.policy_checked } });
+  if (gateway.decision !== 'ALLOW') return { status: 'blocked', summary: `Tool gateway ${gateway.decision}: ${gateway.reason}` };
+  const args = buildGithubReadToolArguments(tool, request);
+  if (!args) return { status: 'blocked', summary: 'The discovered GitHub read tool requires repository arguments that could not be safely derived.' };
+  try {
+    const initialized = await mcpRpc(connection, 'initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'Caveworkers ADK', version: '1.0.0' } });
+    const called = await mcpRpc(connection, 'tools/call', { name: tool.name, arguments: args }, initialized.sessionId);
+    const raw = JSON.stringify(called.data || {});
+    const sha = raw.match(/\b[0-9a-f]{7,40}\b/i)?.[0];
+    return {
+      status: 'executed',
+      summary: `GitHub MCP read verified for ${request.repository}${request.path ? `/${request.path}` : ''}. ${summarizeMcpToolResult(called.data).slice(0, 1400)}`,
+      evidence: { repository: request.repository, tool_name: tool.name, connector_id: String(connection.id), ...(sha ? { commit_sha: sha } : {}) }
+    };
+  } catch (error: any) {
+    reportOperationalFailure('connector.adk_github_read', error, { tenant_hash: anonymizeIdentifier(request.companyId), employee_id: request.employeeId, connector_id: connection.id, tool_name: tool.name });
+    return { status: 'failed', summary: `GitHub MCP read failed: ${String(error?.message || 'The provider request failed.').slice(0, 420)}` };
+  }
+}
+
 function extractGitHubRepository(question: string): { owner: string; repo: string } | null {
   const match = String(question || '').match(/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?(?:[/?#\s]|$)/i);
   if (!match) return null;
@@ -2906,6 +2977,22 @@ async function prepareEmployeeMcpWriteAction(companyId: string, question: string
   if (!tool) {
     return { status: 'blocked' as const, summary: `${employeeName} found the tenant GitHub connector but no discovered file-write tool. Refresh the connector tools and grant the provider’s file or push tool with approval required.` };
   }
+  const gateway = authorizeToolRequest({
+    companyId,
+    requesterCompanyId: companyId,
+    employeeId,
+    connectorEmployeeId: connection.employee_id,
+    connectorId: connection.id,
+    toolName: tool.name,
+    capability: 'pull_request.create',
+    action: 'write',
+    environment: process.env.CAVEWORKERS_ENV === 'production' ? 'production' : process.env.CAVEWORKERS_ENV === 'staging' ? 'staging' : 'development',
+    connectorStatus: connection.status,
+    grantAccessLevel: (connection.tool_grants || []).find((grant) => grant.tool_name === tool.name)?.access_level,
+    toolRisk: 'write',
+    approvalStatus: 'none'
+  });
+  if (gateway.decision === 'DENY') return { status: 'blocked' as const, summary: `${employeeName} cannot prepare this GitHub action: ${gateway.reason}` };
   const argumentsValue = buildMcpWriteToolArguments(tool, { owner: repository.owner, repo: repository.repo, path: filePath, content: extractRequestedFileContent(question), commitMessage: `Caveworkers: update ${filePath}` });
   if (!argumentsValue) {
     return { status: 'blocked' as const, summary: `${employeeName} found ${tool.name}, but its required input schema needs fields Caveworkers could not safely infer. Open the approval composer and provide the missing tool arguments.` };
@@ -3286,6 +3373,22 @@ async function dispatchApprovedMcpTool(approval: ApprovalRecord) {
   if (tool.risk !== 'write' && !isLikelyWriteTool(tool.name)) throw new Error('The approved MCP action is not classified as a write tool.');
   const grant = (connection.tool_grants || []).find((entry) => entry.tool_name === tool.name);
   if (!grant || !['requires_approval', 'read_write'].includes(grant.access_level)) throw new Error('The approved MCP tool is no longer granted to this employee.');
+  const gateway = authorizeToolRequest({
+    companyId: approval.company_id,
+    requesterCompanyId: approval.company_id,
+    employeeId,
+    connectorEmployeeId: connection.employee_id,
+    connectorId: connection.id,
+    toolName: tool.name,
+    capability: 'pull_request.create',
+    action: 'write',
+    environment: process.env.CAVEWORKERS_ENV === 'production' ? 'production' : process.env.CAVEWORKERS_ENV === 'staging' ? 'staging' : 'development',
+    connectorStatus: connection.status,
+    grantAccessLevel: grant.access_level,
+    toolRisk: 'write',
+    approvalStatus: approval.status === 'approved' ? 'approved' : 'none'
+  });
+  if (gateway.decision !== 'ALLOW') throw new Error(`Tool gateway ${gateway.decision}: ${gateway.reason}`);
   const args = payload.arguments && typeof payload.arguments === 'object' ? payload.arguments : {};
   const required = Array.isArray(tool.inputSchema?.required) ? tool.inputSchema.required : [];
   if (!required.every((key: string) => Object.prototype.hasOwnProperty.call(args, key))) throw new Error('The approved MCP action is missing a required tool argument.');
@@ -5570,7 +5673,7 @@ function startWorkflowScheduler() {
 }
 
 export const workforceTestHooks = process.env.NODE_ENV === 'test'
-  ? { handleTaskRoutingAsync, selectCollaborativeTeam, executeEmployeeReadTools, dispatchApprovedEmployeeEmail, dispatchApprovedMcpTool, processNextWorkforceJob: () => processNextWorkforceJob(true), processDueScheduledWorkflows, processDueTenantDeletions, nextCronOccurrence, recoverActiveWorkspaceForOwner, resetRateLimits: () => rateLimitBuckets.clear() }
+  ? { handleTaskRoutingAsync, selectCollaborativeTeam, executeEmployeeReadTools, executeAdkRepositoryTool, dispatchApprovedEmployeeEmail, dispatchApprovedMcpTool, processNextWorkforceJob: () => processNextWorkforceJob(true), processDueScheduledWorkflows, processDueTenantDeletions, nextCronOccurrence, recoverActiveWorkspaceForOwner, resetRateLimits: () => rateLimitBuckets.clear() }
   : undefined;
 
 app.post('/api/task', async (req, res) => {

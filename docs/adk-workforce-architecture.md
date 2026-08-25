@@ -33,20 +33,24 @@ Caveworkers permission engine
 Company memory + task state + workroom trace
 ```
 
-The manager receives the user objective, tenant-scoped knowledge, active employees, each employee’s capability profile, and pre-collected evidence. It delegates to the relevant employees, combines their outputs, states what is verified, and records the collaboration trace. Employee tools are wrapped so they cannot bypass the server-side permission decision.
+The manager receives the user objective, tenant-scoped knowledge, active employees, each employee’s capability profile, and pre-collected evidence. It delegates to the relevant employees, combines their outputs, states what is verified, and records the collaboration trace. Employee tools are wrapped so they cannot bypass the server-side permission decision. Engineering-and-quality requests use a sequential Backend Developer → QA Automation Engineer → Manager workflow so QA can retest or challenge an engineering finding before the final response.
 
 ## Four employee contracts
 
 | Employee | Mission | Default tool capabilities | Forbidden or approval-gated actions |
 |---|---|---|---|
-| Data Analyst | Produce evidence-backed metrics, KPI analysis, anomaly detection, and decision briefs. | Read analytics data, read approved files, parse CSV/XLSX, calculate metrics, draft reports and visualizations. | Production writes, payment actions, unapproved external dispatch, cross-tenant data access. |
+| Data Analyst | Produce evidence-first metrics, KPI analysis, anomaly detection, and decision briefs. | Read analytics data, read approved files, parse CSV/XLSX, calculate metrics, draft reports and visualizations. | Production writes, payment actions, unapproved external dispatch, cross-tenant data access. |
 | Cybersecurity Analyst | Assess vulnerabilities, access controls, logs, configuration, and defensive risk. | Read repositories, dependency metadata, logs, infrastructure metadata, and approved security sources; draft findings. | Destructive scans, offensive actions, production changes, privilege elevation, unapproved issue writes. |
-| Backend Developer | Inspect and improve application code, APIs, schemas, and development workflows. | Read repositories/issues, inspect files, run bounded development checks, create branches and draft pull requests. | Production deployment, production database writes, protected-branch merges, billing or identity changes without approval. |
+| Backend Developer | Inspect and improve application code, APIs, database migrations, and development workflows. | Read tenant-authorized GitHub repositories through MCP, inspect files/issues, run bounded development checks, create branches and draft pull requests. | Production deployment, production database writes, protected-branch merges, billing or identity changes without approval. |
 | QA Automation Engineer | Reproduce defects and provide unit, integration, API, browser, regression, and release evidence. | Read repositories, run bounded tests, inspect test databases, write test artifacts and reports. | Production mutation, destructive test activity, release approval, unapproved external writes. |
 
 ## Permission model
 
 Every ADK tool request is evaluated with `{ company_id, user_id, agent_id, task_id, session_id, environment, capability }`. The result is one of `ALLOW`, `DENY`, or `APPROVAL_REQUIRED`. ADK’s tool-confirmation feature may provide the conversational interruption, but Caveworkers’ own permission and approval records remain authoritative for tenant policy, auditability, and resumption.[3]
+
+## Tool gateway and first operational path
+
+All ADK connector requests now pass through `src/adk/tool-gateway.ts`, which checks the tenant, employee assignment, connector status, tool scope, risk classification, employee capability policy, and approval status. The first live path is a read-only GitHub repository tool delivered through a tenant-owned streamable HTTP MCP connector. Arav and Priya may use the read path; GitHub write tools remain prepared through the existing approval queue and are rechecked by the gateway immediately before dispatch. A successful read produces bounded evidence and an audit record; missing connectors, missing grants, cross-tenant identity, or unsafe tool classifications fail closed.
 
 ## State and memory
 
@@ -54,7 +58,7 @@ Caveworkers remains the system of record for task lifecycle, workroom events, co
 
 ## Delivery sequence
 
-The redesign is delivered in stages within the existing repository: install the official ADK TypeScript SDK and upgrade the runtime; add a typed employee registry and permission matrix; add the manager and employee agent tree; route workforce narratives through ADK with the existing safe model fallback; expose ADK execution metadata in task traces; add deterministic unit tests for the registry, routing, permission gates, and fallback behavior; then connect real MCP tools one connector family at a time. A2A and background autonomous work remain later extensions rather than being introduced before the in-process contracts are verified.
+The first operational milestone is complete within the existing repository: the official ADK TypeScript SDK and Node.js runtime are installed; the typed employee registry, permission matrix, manager/employee tree, central gateway, GitHub read path, approval recheck, Backend-to-QA workflow, ADK trace metadata, and deterministic tests are in place. A2A and additional connector families remain later extensions rather than being introduced before the in-process contracts are verified.
 
 ## References
 

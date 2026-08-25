@@ -184,6 +184,12 @@ describe('Caveworkers current workforce and billing invariants', () => {
     expect(workroom.body.employees.every((employee: any) => employee.system_prompt === undefined)).toBe(true);
   });
 
+  it('fails closed for the ADK GitHub path when no tenant-owned connector is configured', async () => {
+    const result = await workforceTestHooks!.executeAdkRepositoryTool({ companyId: 'company-a', employeeId: 'backend_developer', capability: 'repository.read', repository: 'ragulyogesh7-cloud/caveworkers' });
+    expect(result.status).toBe('blocked');
+    expect(result.summary).toContain('No connected GitHub MCP connector');
+  });
+
   it('keeps detailed plans, memories, conversations, and task execution isolated to the current tenant and employee workspace', async () => {
     await csrfRequest('user-a', 'post', '/api/employees/data_analyst/prebuild-plan').send({ sections: planSections }).expect(201);
     await request(app).get('/api/employees/data_analyst/prebuild-plan').set('x-caveworkers-test-user', 'user-b').expect(200).then((response) => expect(response.body.plan).toBeNull());

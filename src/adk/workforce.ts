@@ -7,7 +7,7 @@ export type AdkEnvironment = 'development' | 'staging' | 'production';
 
 export interface PermissionResult {
   decision: PermissionDecision;
-  employee_id: AdkEmployeeId;
+  employee_id: string;
   capability: string;
   environment: AdkEnvironment;
   reason: string;
@@ -25,6 +25,26 @@ export interface AdkEmployeeDefinition {
   instruction: string;
   model: string;
 }
+
+export interface AdkToolExecutionRequest {
+  companyId: string;
+  userId?: string;
+  taskId?: number;
+  employeeId: AdkEmployeeId;
+  capability: string;
+  repository: string;
+  path?: string;
+  ref?: string;
+  query?: string;
+}
+
+export interface AdkToolExecutionResult {
+  status: 'executed' | 'blocked' | 'failed';
+  summary: string;
+  evidence?: Record<string, string>;
+}
+
+export type AdkToolExecutor = (request: AdkToolExecutionRequest) => Promise<AdkToolExecutionResult>;
 
 const MODEL = (process.env.ADK_MODEL || 'gemini-2.5-flash').trim();
 
@@ -64,7 +84,7 @@ export const ADK_EMPLOYEE_DEFINITIONS: readonly AdkEmployeeDefinition[] = [
     allowedCapabilities: ['repository.read', 'issues.read', 'devdb.read', 'devdb.write', 'terminal.sandbox.execute', 'branch.create', 'commit.create', 'test.run', 'workspace.memory.read'],
     approvalCapabilities: ['pull_request.create', 'protected_branch.merge', 'production.database.write', 'production.deploy', 'ci.release.trigger'],
     forbiddenCapabilities: ['billing.modify', 'user.delete', 'repository.delete', 'cross_tenant.data.read', 'production.secret.read'],
-    instruction: `${roleGuardrails}\n\nYou are Arav, the Full Stack Backend Developer. Start with affected components and a smallest reversible change. Design validation, authorization, idempotency, error handling, observability, rollback, and verification. Development work may be prepared within the capability boundary; protected branch merges, production writes, deployments, and releases always require a separate platform approval.`,
+    instruction: `${roleGuardrails}\n\nYou are Arav, the Full Stack Backend Developer. Start with affected components and a smallest reversible change. When the tenant-gated GitHub repository-read tool is available, use it for repository evidence before proposing code changes. Design validation, authorization, idempotency, error handling, observability, rollback, and verification. Development work may be prepared within the capability boundary; protected branch merges, production writes, deployments, and releases always require a separate platform approval.`,
     model: MODEL
   },
   {
@@ -92,7 +112,7 @@ export function evaluateAdkPermission(employeeId: string, capability: string, en
   const normalizedCapability = String(capability || '').trim().toLowerCase();
   const normalizedEnvironment = environment || 'development';
   if (!definition) {
-    return { decision: 'DENY', employee_id: 'data_analyst', capability: normalizedCapability, environment: normalizedEnvironment, reason: 'Unknown employee identity.' };
+    return { decision: 'DENY', employee_id: String(employeeId || 'unknown'), capability: normalizedCapability, environment: normalizedEnvironment, reason: 'Unknown employee identity.' };
   }
   const base = { employee_id: definition.id, capability: normalizedCapability, environment: normalizedEnvironment };
   if (!normalizedCapability) return { ...base, decision: 'DENY', reason: 'A capability is required.' };
@@ -131,23 +151,59 @@ function permissionTool(employeeId: AdkEmployeeId) {
   });
 }
 
-const employeeAgents = ADK_EMPLOYEE_DEFINITIONS.map((definition) => new LlmAgent({
-  name: definition.id,
-  description: `${definition.role}: ${definition.mission}`,
-  model: definition.model,
-  instruction: definition.instruction,
-  tools: [permissionTool(definition.id)]
-}));
+const githubReadSchema = {
+  type: 'OBJECT',
+  properties: {
+    repository: { type: 'STRING', description: 'GitHub repository in owner/name form or a GitHub URL.' },
+    path: { type: 'STRING', description: 'Optional file or directory path within the repository.' },
+    ref: { type: 'STRING', description: 'Optional branch, tag, or commit ref.' },
+    query: { type: 'STRING', description: 'Optional bounded search request for repository context.' }
+  },
+  required: ['repository']
+} as any;
 
-export const ADK_EMPLOYEE_AGENTS = Object.fromEntries(employeeAgents.map((agent, index) => [ADK_EMPLOYEE_DEFINITIONS[index].id, agent])) as Record<AdkEmployeeId, LlmAgent>;
+type GithubReadInput = { repository: string; path?: string; ref?: string; query?: string };
 
-export const ADK_MANAGER_AGENT = new LlmAgent({
-  name: 'caveworkers_manager',
-  description: 'Central Caveworkers workforce orchestrator and delivery manager.',
-  model: MODEL,
-  instruction: `${roleGuardrails}\n\nYou are the Caveworkers Manager and central orchestrator. Receive the user objective, workspace context, current evidence, active employee roster, and capability boundaries. Decide which specialist should work, what each specialist should contribute, dependencies and order, when to ask another specialist, and when to escalate. Delegate to the specialized employee agents instead of pretending to do their work. Synthesize only evidence returned in the current task. Return a concise workplace update with: answer or blocker first, verified findings, contributors, risks or missing evidence, and the next action. Never authorize or claim production changes.\n\nEmployee contracts:\n${ADK_EMPLOYEE_DEFINITIONS.map((definition) => `- ${definition.name} (${definition.id}): ${definition.mission}`).join('\n')}`,
-  subAgents: employeeAgents
-});
+function githubReadTool(employeeId: AdkEmployeeId, executor: AdkToolExecutor, userId?: string, taskId?: number) {
+  return new FunctionTool({
+    name: 'read_github_repository',
+    description: 'Read tenant-authorized GitHub repository context through the Caveworkers tool gateway. This tool is read-only and cannot create branches, commits, pull requests, or issues.',
+    parameters: githubReadSchema,
+    execute: (input: GithubReadInput) => executor({ companyId: '', userId, taskId, employeeId, capability: 'repository.read', ...input })
+  });
+}
+
+export interface AdkAgentTree {
+  manager: LlmAgent;
+  employees: Record<AdkEmployeeId, LlmAgent>;
+}
+
+export function createAdkAgentTree(executor?: AdkToolExecutor, userId?: string, taskId?: number): AdkAgentTree {
+  const agents = ADK_EMPLOYEE_DEFINITIONS.map((definition) => {
+    const tools = [permissionTool(definition.id)];
+    if ((definition.id === 'backend_developer' || definition.id === 'qa_engineer') && executor) tools.push(githubReadTool(definition.id, executor, userId, taskId));
+    return new LlmAgent({
+      name: definition.id,
+      description: `${definition.role}: ${definition.mission}`,
+      model: definition.model,
+      instruction: definition.instruction,
+      tools
+    });
+  });
+  const employees = Object.fromEntries(agents.map((agent, index) => [ADK_EMPLOYEE_DEFINITIONS[index].id, agent])) as Record<AdkEmployeeId, LlmAgent>;
+  const manager = new LlmAgent({
+    name: 'caveworkers_manager',
+    description: 'Central Caveworkers workforce orchestrator and delivery manager.',
+    model: MODEL,
+    instruction: `${roleGuardrails}\n\nYou are the Caveworkers Manager and central orchestrator. Receive the user objective, workspace context, current evidence, active employee roster, and capability boundaries. Decide which specialist should work, what each specialist should contribute, dependencies and order, when to ask another specialist, and when to escalate. Delegate to the specialized employee agents instead of pretending to do their work. When Arav has the tenant-gated GitHub read tool, use it for repository evidence before any engineering recommendation. Synthesize only evidence returned in the current task. Return a concise workplace update with: answer or blocker first, verified findings, contributors, risks or missing evidence, and the next action. Never authorize or claim production changes.\n\nEmployee contracts:\n${ADK_EMPLOYEE_DEFINITIONS.map((definition) => `- ${definition.name} (${definition.id}): ${definition.mission}`).join('\n')}`,
+    subAgents: agents
+  });
+  return { manager, employees };
+}
+
+const defaultAgentTree = createAdkAgentTree();
+export const ADK_EMPLOYEE_AGENTS = defaultAgentTree.employees;
+export const ADK_MANAGER_AGENT = defaultAgentTree.manager;
 
 export interface AdkWorkforceInput {
   companyId: string;
@@ -155,6 +211,7 @@ export interface AdkWorkforceInput {
   taskId?: number;
   preferredEmployeeId?: string;
   prompt: string;
+  toolExecutor?: AdkToolExecutor;
 }
 
 export interface AdkWorkforceResult {
@@ -186,7 +243,8 @@ export async function runAdkWorkforce(input: AdkWorkforceInput): Promise<AdkWork
     input.prompt
   ].join('\n\n');
   try {
-    const runner = new InMemoryRunner({ agent: ADK_MANAGER_AGENT, appName: 'caveworkers-adk-workforce' });
+    const tree = createAdkAgentTree(input.toolExecutor ? async (request) => input.toolExecutor!({ ...request, companyId: input.companyId }) : undefined, input.userId, input.taskId);
+    const runner = new InMemoryRunner({ agent: tree.manager, appName: 'caveworkers-adk-workforce' });
     const events: Array<{ author?: string; final: boolean; text?: string }> = [];
     for await (const event of runner.runEphemeral({
       userId: input.userId || 'workspace-manager',
@@ -201,4 +259,62 @@ export async function runAdkWorkforce(input: AdkWorkforceInput): Promise<AdkWork
   } catch (error: any) {
     return { status: 'failed', text: '', model: MODEL, latencyMs: Date.now() - startedAt, events: [], error: String(error?.message || 'ADK workforce execution failed.').slice(0, 500) };
   }
+}
+
+export interface AdkEngineeringQualityResult extends AdkWorkforceResult {
+  stages: Array<{ employeeId: 'backend_developer' | 'qa_engineer' | 'caveworkers_manager'; status: 'completed' | 'failed'; text?: string; error?: string }>;
+}
+
+async function runSingleAdkAgent(agent: LlmAgent, userId: string, prompt: string): Promise<{ status: 'completed' | 'failed'; text: string; events: Array<{ author?: string; final: boolean; text?: string }>; error?: string }> {
+  const events: Array<{ author?: string; final: boolean; text?: string }> = [];
+  try {
+    const runner = new InMemoryRunner({ agent, appName: 'caveworkers-adk-workforce' });
+    for await (const event of runner.runEphemeral({ userId, newMessage: { role: 'user', parts: [{ text: prompt }] } as Content })) {
+      const text = textFromEvent(event);
+      events.push({ author: event.author, final: isFinalResponse(event), text: text || undefined });
+    }
+    const text = events.filter((event) => event.final && event.text).map((event) => event.text).filter(Boolean).pop() || events.map((event) => event.text).filter(Boolean).pop() || '';
+    return text ? { status: 'completed', text, events } : { status: 'failed', text: '', events, error: 'ADK agent returned no response.' };
+  } catch (error: any) {
+    return { status: 'failed', text: '', events, error: String(error?.message || 'ADK agent execution failed.').slice(0, 500) };
+  }
+}
+
+export async function runAdkEngineeringQualityWorkflow(input: AdkWorkforceInput): Promise<AdkEngineeringQualityResult> {
+  const startedAt = Date.now();
+  if (!adkConfigured()) return { status: 'disabled', text: '', model: MODEL, latencyMs: 0, events: [], stages: [] };
+  const tree = createAdkAgentTree(input.toolExecutor ? async (request) => input.toolExecutor!({ ...request, companyId: input.companyId }) : undefined, input.userId, input.taskId);
+  const userId = input.userId || 'workspace-manager';
+  const backendPrompt = [
+    `Tenant: ${input.companyId}`,
+    `Task: ${input.taskId || 'engineering-quality-workflow'}`,
+    'You are the first stage. Analyze the engineering request, inspect the tenant-authorized GitHub repository if a read tool is available, and return an implementation diagnosis, affected components, proposed change, risks, and verification plan. Do not claim a code change happened.',
+    input.prompt
+  ].join('\n\n');
+  const backend = await runSingleAdkAgent(tree.employees.backend_developer, userId, backendPrompt);
+  const qaPrompt = [
+    `Tenant: ${input.companyId}`,
+    `Task: ${input.taskId || 'engineering-quality-workflow'}`,
+    'You are the second stage. Review the Backend Developer finding below, inspect the same tenant-authorized repository if a read tool is available, and produce deterministic QA coverage, reproduction steps, expected evidence, and a pass/fail/retest recommendation. Do not claim tests ran unless execution evidence is present.',
+    `Original request:\n${input.prompt}`,
+    `Backend finding:\n${backend.text || backend.error || 'Backend stage failed before producing a finding.'}`
+  ].join('\n\n');
+  const qa = await runSingleAdkAgent(tree.employees.qa_engineer, userId, qaPrompt);
+  const managerPrompt = [
+    `Tenant: ${input.companyId}`,
+    `Task: ${input.taskId || 'engineering-quality-workflow'}`,
+    'You are the final Caveworkers Manager stage. Synthesize the Backend Developer and QA Automation Engineer findings. If QA identified a failure, state the exact retest or backend revision needed. If evidence is only a plan or observation, label it that way. Return a concise workplace update with answer/blocker first, verified evidence, contributors, risks, and next action. Never claim code changes, tests, commits, pull requests, deployments, or releases without explicit tool evidence.',
+    `Original request:\n${input.prompt}`,
+    `Backend stage:\n${backend.text || backend.error || 'failed'}`,
+    `QA stage:\n${qa.text || qa.error || 'failed'}`
+  ].join('\n\n');
+  const manager = await runSingleAdkAgent(tree.manager, userId, managerPrompt);
+  const events = [...backend.events, ...qa.events, ...manager.events];
+  const stages: AdkEngineeringQualityResult['stages'] = [
+    { employeeId: 'backend_developer', status: backend.status, text: backend.text || undefined, error: backend.error },
+    { employeeId: 'qa_engineer', status: qa.status, text: qa.text || undefined, error: qa.error },
+    { employeeId: 'caveworkers_manager', status: manager.status, text: manager.text || undefined, error: manager.error }
+  ];
+  if (manager.status !== 'completed') return { status: 'failed', text: '', model: MODEL, latencyMs: Date.now() - startedAt, events, stages, error: manager.error || 'Manager synthesis failed.' };
+  return { status: 'completed', text: manager.text, model: MODEL, latencyMs: Date.now() - startedAt, events, stages };
 }
