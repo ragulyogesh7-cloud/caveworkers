@@ -18,6 +18,7 @@ import { Sentry, anonymizeIdentifier, reportOperationalFailure, sentryEnabled } 
 import { isTrialExpired, verifyRazorpayPaymentSignature, verifyRazorpayWebhookSignature } from './security.js';
 import { getMcpRegistryServer, searchMcpRegistry } from './mcp-registry.js';
 import { CONNECTOR_DIRECTORY_CATEGORIES, CONNECTOR_DIRECTORY_COUNT, connectorDirectoryPublicView, getConnectorDirectoryEntry, searchConnectorDirectory } from './connector-directory.js';
+import { ADK_EMPLOYEE_DEFINITIONS, getAdkEmployeeDefinition, runAdkWorkforce } from './src/adk/workforce.js';
 import * as runtimeConfig from './src/config/index.js';
 
 dotenv.config();
@@ -56,7 +57,7 @@ if (process.env.GEMINI_API_KEY) {
   }
 }
 
-// David's provider is configurable. OpenRouter/Qwen is preferred in production;
+// Maya's provider is configurable. OpenRouter/Qwen is preferred in production;
 // Gemini remains a backwards-compatible fallback while a tenant is provisioned.
 const OPENROUTER_API_KEY = runtimeConfig.OPENROUTER_API_KEY;
 const OPENROUTER_KEY_READY = runtimeConfig.OPENROUTER_KEY_READY;
@@ -108,86 +109,24 @@ interface SpecialistModelConfig {
   providerPreferences?: { allow_fallbacks?: boolean; require_parameters?: boolean; data_collection?: 'allow' | 'deny'; zdr?: boolean };
 }
 
-const EMPLOYEE_SPECIALIST_CONFIGS: Record<string, SpecialistModelConfig> = {
-  data_analyst: {
-    model: 'google/gemini-3.1-pro-preview',
-    fallbackModel: 'anthropic/claude-sonnet-5',
-    roleTitle: 'Data Analyst',
-    systemPrompt: `You are the Data Analyst at Caveworkers. You provide evidence-first quantitative analysis, safe read-only SQL drafts, metric definitions, KPI variance analysis, and scenario-based forecasts. Start with the decision-relevant finding, then state evidence, assumptions, limitations, and a clear next action. Never invent source data, tool results, external actions, citations, or certainty. Treat forecasts as scenarios, not commitments; do not provide tax, legal, investment, or accounting advice. Use only tenant-assigned tools and never write to a source system without a recorded human approval. You may prepare a payment recommendation or invoice-validation checklist, but you may never create, initiate, capture, refund, or claim a Razorpay payment. Only a signed-in owner can explicitly initiate live checkout. If data is missing, ask one precise question.`,
+const EMPLOYEE_SPECIALIST_CONFIGS: Record<string, SpecialistModelConfig> = Object.fromEntries(
+  ADK_EMPLOYEE_DEFINITIONS.map((definition) => [definition.id, {
+    model: definition.model,
+    fallbackModel: 'gemini-2.5-flash',
+    roleTitle: definition.role,
+    systemPrompt: definition.instruction,
     providerPreferences: { allow_fallbacks: true, require_parameters: true, data_collection: 'deny' }
-  },
-  cybersecurity_analyst: {
-    model: 'anthropic/claude-sonnet-5',
-    fallbackModel: 'google/gemini-3.1-pro-preview',
-    roleTitle: 'Cybersecurity Analyst',
-    systemPrompt: `You are the Cybersecurity Analyst at Caveworkers. You are an evidence-led, least-privilege security decision-support specialist. Classify work as access/identity, incident, vulnerability, IT service, compliance, questionnaire, change control, or infrastructure risk. Start with severity and affected scope, then distinguish observed evidence from hypotheses, name missing evidence, propose the least-privilege reversible option, state rollback and verification, and identify the owner decision required. Never invent a security alert, scan result, control status, incident resolution, access change, patch, ticket update, or external communication. Do not expose secrets, bypass authorization, provide harmful evasion guidance, or run invasive work outside tenant-approved scope. All Cybersecurity Analyst write-capable actions require explicit human approval even if a connector is otherwise configured for autopilot. You may assess payment-flow or invoice-fraud risk, but may never create, initiate, capture, refund, alter, or claim a Razorpay payment. Only a signed-in owner can explicitly initiate live checkout.`,
-    providerPreferences: { allow_fallbacks: true, require_parameters: true, data_collection: 'deny' }
-  },
-  backend_developer: {
-    model: 'openai/gpt-5.3-codex',
-    fallbackModel: 'anthropic/claude-sonnet-5',
-    roleTitle: 'Full Stack Backend Developer',
-    systemPrompt: `You are the Full Stack Backend Developer at Caveworkers. You classify work as a bug, feature, incident, architecture, release, performance, migration, or infrastructure request. Start with the classification and affected components, then distinguish verified repository evidence from assumptions, propose the smallest reversible change, state risk, rollback, validation, and required approval. Design APIs with validation, authorization, error handling, idempotency, and observability. Treat database changes as forward migration plus rollback and compatibility work. Never invent a commit, pull request, issue update, test result, migration, deployment, CI run, provider action, or external outcome. Repository writes, schema migration execution, deployment, secret/environment changes, access-control changes, CI/CD changes, and external communication require explicit human approval. Never reveal credentials, run hidden commands, bypass authorization, or perform a live Razorpay payment operation. You may design payment integration, validation, and webhook controls only; a signed-in owner alone can explicitly initiate live Razorpay checkout.`,
-    providerPreferences: { allow_fallbacks: true, require_parameters: true, data_collection: 'deny' }
-  },
-  qa_engineer: {
-    model: 'anthropic/claude-sonnet-5',
-    fallbackModel: 'google/gemini-3.7-flash',
-    roleTitle: 'Software QA / Automation Engineer',
-    systemPrompt: `You are the Software QA and Automation Engineer at Caveworkers. You are a precise, neutral, evidence-led verification specialist. Begin by identifying the system under test, environment, revision, expected behavior, critical journey, risk, available evidence, and approval need. Convert requirements into observable acceptance criteria across happy path, validation, authorization, failure, edge, regression, and compatibility risks. Use deterministic, isolated, non-destructive test paths and label every conclusion as a plan, verified execution result, observation, defect, or release recommendation. Never invent a test run, pass/fail result, log, screenshot, release state, provider action, or external outcome. Do not execute destructive or production tests, deploy software, change test/production data, send external communications, expose credentials, or bypass authentication. Test payment flows only in an explicitly approved test or sandbox context; never create a live Razorpay order, open live checkout, capture/refund payment, or claim payment success. A signed-in owner alone can initiate live checkout after explicit confirmation and server-side verification.`,
-    providerPreferences: { allow_fallbacks: true, require_parameters: true, data_collection: 'deny' }
-  },
-  maya: {
-    model: 'google/gemini-2.5-flash',
-    fallbackModel: 'google/gemini-2.5-flash',
-    roleTitle: 'Data Analyst',
-    systemPrompt: 'You are Maya, the Data Analyst at Caveworkers. You provide quantitative rigor, SQL queries, metric breakdowns, and KPI dashboards.'
-  },
-  arav: {
-    model: 'google/gemini-2.5-flash',
-    fallbackModel: 'google/gemini-2.5-flash',
-    roleTitle: 'Full Stack Backend Developer',
-    systemPrompt: 'You are Arav, the Full Stack Backend Developer at Caveworkers. You specialize in codebases, APIs, and infrastructure safety.'
-  },
-  iris: {
-    model: 'google/gemini-2.5-flash',
-    fallbackModel: 'google/gemini-2.5-flash',
-    roleTitle: 'Cybersecurity Analyst',
-    systemPrompt: 'You are Iris, the Cybersecurity Analyst at Caveworkers. You specialize in vulnerability analysis and zero-trust controls.'
-  },
-  priya: {
-    model: 'google/gemini-2.5-flash',
-    fallbackModel: 'google/gemini-2.5-flash',
-    roleTitle: 'Software QA/Automation Engineer',
-    systemPrompt: 'You are Priya, the Software QA/Automation Engineer at Caveworkers. You specialize in quality assurance and workflows.'
-  },
-  david: {
-    model: 'google/gemini-2.5-flash',
-    fallbackModel: 'google/gemini-2.5-flash',
-    roleTitle: 'Data Analyst',
-    systemPrompt: 'You are Maya, the Data Analyst at Caveworkers. You provide quantitative rigor, SQL queries, metric breakdowns, and KPI dashboards.'
-  },
-  mike: {
-    model: 'google/gemini-2.5-flash',
-    fallbackModel: 'google/gemini-2.5-flash',
-    roleTitle: 'Full Stack Backend Developer',
-    systemPrompt: 'You are Arav, the Full Stack Backend Developer at Caveworkers. You specialize in codebases, APIs, and infrastructure safety.'
-  },
-  sarah: {
-    model: 'google/gemini-2.5-flash',
-    fallbackModel: 'google/gemini-2.5-flash',
-    roleTitle: 'Software QA/Automation Engineer',
-    systemPrompt: 'You are Priya, the Software QA/Automation Engineer at Caveworkers. You specialize in quality assurance and workflows.'
-  }
-};
+  }])
+);
 
 type AnalystNarrativeResult = {
   text: string;
-  provider: 'openrouter' | 'gemini' | 'preview';
+  provider: 'openrouter' | 'gemini' | 'google_adk' | 'preview';
   model?: string;
   latency_ms: number;
   usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; cost?: number };
   error_code?: string;
+  adk_events?: Array<{ author?: string; final: boolean; text?: string }>;
 };
 
 function extractAnalystText(value: unknown): string {
@@ -218,7 +157,7 @@ async function generateAnalystNarrative(prompt: string, tenantId: string): Promi
           stream: false,
           user: crypto.createHash('sha256').update(tenantId).digest('hex').slice(0, 32),
           messages: [
-            { role: 'system', content: 'You are David, a precise senior business data analyst. Write concise decision-ready analysis. Never invent access to data, results, or external actions. Clearly label previews, assumptions, and missing sources.' },
+            { role: 'system', content: 'You are Maya, a precise senior business data analyst. Write concise decision-ready analysis. Never invent access to data, results, or external actions. Clearly label previews, assumptions, and missing sources.' },
             { role: 'user', content: prompt }
           ]
         })
@@ -250,8 +189,15 @@ async function generateAnalystNarrative(prompt: string, tenantId: string): Promi
   return openRouterFailure || { text: '', provider: 'preview', latency_ms: Date.now() - startedAt, error_code: OPENROUTER_KEY_READY ? 'provider_unavailable' : 'model_not_configured' };
 }
 
-async function generateWorkforceNarrative(prompt: string, tenantId: string, employeeId?: string): Promise<AnalystNarrativeResult> {
+async function generateWorkforceNarrative(prompt: string, tenantId: string, employeeId?: string, taskId?: number): Promise<AnalystNarrativeResult> {
   const startedAt = Date.now();
+  const adkResult = await runAdkWorkforce({ companyId: tenantId, taskId, preferredEmployeeId: employeeId, prompt });
+  if (adkResult.status === 'completed' && adkResult.text) {
+    return { text: adkResult.text, provider: 'google_adk', model: adkResult.model, latency_ms: adkResult.latencyMs, adk_events: adkResult.events };
+  }
+  if (adkResult.status === 'failed') {
+    reportOperationalFailure('workforce.adk_request', new Error(adkResult.error || 'ADK workforce execution failed.'), { tenant_hash: anonymizeIdentifier(tenantId), employee_id: employeeId || 'manager' });
+  }
   const targetEmployeeId = (employeeId && EMPLOYEE_SPECIALIST_CONFIGS[employeeId]) ? employeeId : 'data_analyst';
   const config = EMPLOYEE_SPECIALIST_CONFIGS[targetEmployeeId] || EMPLOYEE_SPECIALIST_CONFIGS.data_analyst;
   const chosenModel = specialistModelFor(targetEmployeeId);
@@ -554,68 +500,31 @@ const SUBSCRIPTION_PLANS: Record<string, any> = {
   }
 };
 
-const EMPLOYEE_CATALOG = [
-  {
-    id: 'data_analyst',
-    employee_code: 'CW_EMP_001',
-    name: 'Maya',
-    role: 'Data Analyst',
-    department: 'Data & Business Intelligence',
-    color: '#f59e0b',
-    avatar_url: '/static/assets/employee-avatars/maya.webp',
-    autonomy_level: 'Level 2 (Analyze & Draft)',
-    persona: 'Maya is an evidence-first data analyst who executes SQL queries, analyzes KPI metrics, constructs financial models, evaluates business datasets, and provides decision-ready analytical briefs.',
-    system_prompt: 'You are Maya, the Data Analyst at Caveworkers. You own SQL queries, business metrics, financial models, KPI reporting, dataset exploration, dashboard generation, and evidence-backed analytics. Always provide clear calculations, assumptions, and structured insights.',
-    default_tools: ['SQL Workspace', 'Google Sheets', 'Analytics MCP', 'Gmail'],
-    collaborates_with: ['backend_developer', 'cybersecurity_analyst', 'qa_engineer'],
-    status: 'active'
-  },
-  {
-    id: 'cybersecurity_analyst',
-    employee_code: 'CW_EMP_002',
-    name: 'Iris',
-    role: 'Cybersecurity Analyst',
-    department: 'Security & Compliance',
-    color: '#64748b',
-    avatar_url: '/static/assets/employee-avatars/iris.webp',
-    autonomy_level: 'Level 3 (Recommend with Review)',
-    persona: 'Iris is a security-first analyst who protects infrastructure, audits access controls, evaluates CVEs and vulnerabilities, enforces zero-trust principles, and ensures regulatory compliance (SOC2/ISO27001).',
-    system_prompt: 'You are Iris, the Cybersecurity Analyst at Caveworkers. You own security posture reviews, vulnerability assessments, access control audits, zero-trust enforcement, incident triage, and compliance checklists. High-risk security modifications and access elevation require human-in-the-loop review.',
-    default_tools: ['Identity Provider MCP', 'Security Scanner', 'ITSM MCP', 'Gmail'],
-    collaborates_with: ['backend_developer', 'qa_engineer', 'data_analyst'],
-    status: 'active'
-  },
-  {
-    id: 'backend_developer',
-    employee_code: 'CW_EMP_003',
-    name: 'Arav',
-    role: 'Full Stack Backend Developer',
-    department: 'Engineering & Architecture',
-    color: '#3b82f6',
-    avatar_url: '/static/assets/employee-avatars/arav.webp',
-    autonomy_level: 'Level 3 (Recommend with Review)',
-    persona: 'Arav is a pragmatic full stack and backend engineer specializing in scalable REST/GraphQL APIs, distributed services, databases (Postgres, Firestore, Redis), CI/CD pipelines, and cloud architecture.',
-    system_prompt: 'You are Arav, the Full Stack Backend Developer at Caveworkers. You own server architecture, API design, database schemas, performance optimization, repository triage, backend services, and CI/CD workflow automation. Production deployments and schema migrations require human approval.',
-    default_tools: ['GitHub MCP', 'Database MCP', 'Terminal / Docker', 'Slack'],
-    collaborates_with: ['qa_engineer', 'data_analyst', 'cybersecurity_analyst'],
-    status: 'active'
-  },
-  {
-    id: 'qa_engineer',
-    employee_code: 'CW_EMP_004',
-    name: 'Priya',
-    role: 'Software QA/Automation Engineer',
-    department: 'Quality Assurance & Reliability',
-    color: '#10b981',
-    avatar_url: '/static/assets/employee-avatars/priya.webp',
-    autonomy_level: 'Level 2 (Analyze & Draft)',
-    persona: 'Priya is a detail-oriented QA automation engineer who designs automated test suites (Playwright, Cypress, Jest), performs regression and integration testing, finds edge cases, and guarantees software reliability.',
-    system_prompt: 'You are Priya, the Software QA/Automation Engineer at Caveworkers. You own test automation suites, end-to-end browser tests, API verification, regression analysis, load testing, and test coverage validation. Document reproduction steps and verification logs clearly.',
-    default_tools: ['Playwright / Cypress MCP', 'GitHub MCP', 'Test Runner', 'Slack'],
-    collaborates_with: ['backend_developer', 'cybersecurity_analyst', 'data_analyst'],
-    status: 'active'
-  }
-];
+const EMPLOYEE_CATALOG = ADK_EMPLOYEE_DEFINITIONS.map((definition, index) => ({
+  id: definition.id,
+  employee_code: `CW_EMP_${String(index + 1).padStart(3, '0')}`,
+  name: definition.name,
+  role: definition.role,
+  department: {
+    data_analyst: 'Data & Business Intelligence',
+    cybersecurity_analyst: 'Security & Compliance',
+    backend_developer: 'Engineering & Architecture',
+    qa_engineer: 'Quality Assurance & Reliability'
+  }[definition.id],
+  color: {
+    data_analyst: '#f59e0b',
+    cybersecurity_analyst: '#64748b',
+    backend_developer: '#3b82f6',
+    qa_engineer: '#10b981'
+  }[definition.id],
+  avatar_url: `/static/assets/employee-avatars/${definition.id === 'backend_developer' ? 'arav' : definition.name.toLowerCase()}.webp`,
+  autonomy_level: definition.approvalCapabilities.length > 1 ? 'Level 3 (Recommend with Review)' : 'Level 2 (Analyze & Draft)',
+  persona: definition.mission,
+  system_prompt: definition.instruction,
+  default_tools: definition.allowedCapabilities,
+  collaborates_with: ADK_EMPLOYEE_DEFINITIONS.filter((candidate) => candidate.id !== definition.id).map((candidate) => candidate.id),
+  status: 'active'
+}));
 
 
 function defaultEmployeeToolAccess(employeeId: string, toolName: string): 'read_only' | 'requires_approval' | 'read_write' {
@@ -733,7 +642,7 @@ interface TaskRecord {
   collaboration_summary?: string;
   live_tool_evidence?: WorkforceLiveToolEvidence[];
   web_research?: WebResearchEvidence[];
-  /** Employee explicitly addressed by the user in Company Room, when applicable. Sarah remains task owner. */
+  /** Employee explicitly addressed by the user in Company Room, when applicable. Caveworkers Manager remains task owner. */
   direct_employee_id?: string;
   queued_at?: string;
   started_at?: string;
@@ -942,7 +851,7 @@ interface AnalystRun {
   report: string;
   chart?: { title: string; labels: string[]; values: number[]; unit: string; source_note: string };
   approval_id?: number;
-  model?: { provider: 'openrouter' | 'gemini' | 'preview'; name?: string; latency_ms: number; usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; cost?: number }; error_code?: string };
+  model?: { provider: 'openrouter' | 'gemini' | 'google_adk' | 'preview'; name?: string; latency_ms: number; usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; cost?: number }; error_code?: string };
   created_at: string;
 }
 
@@ -2311,7 +2220,7 @@ function publicEmployeeChat(task: TaskRecord) {
   (task.trace || []).forEach(add);
   const hasTraceFinalAnswer = (task.trace || []).some((message: any) => message?.kind === 'final_answer' && employeeForChatMessage(message));
   if (task.answer && !['queued', 'processing'].includes(task.status) && !hasTraceFinalAnswer) {
-    add({ kind: 'final_answer', thread_role: 'final_answer', sender: 'Sarah', receiver: 'Company room', sender_id: 'sarah', receiver_id: 'company-room', body: task.answer, created_at: task.completed_at || task.created_at });
+    add({ kind: 'final_answer', thread_role: 'final_answer', sender: 'Caveworkers Manager', receiver: 'Company room', sender_id: 'qa_engineer', receiver_id: 'company-room', body: task.answer, created_at: task.completed_at || task.created_at });
   }
   return messages.sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime());
 }
@@ -2979,8 +2888,8 @@ function buildMcpWriteToolArguments(tool: any, input: { owner: string; repo: str
 
 async function prepareEmployeeMcpWriteAction(companyId: string, question: string, taskId: number, requestedEmployeeId: string) {
   const workforce = activeWorkforce(companyId);
-  const employee = workforce.find((entry) => entry.id === requestedEmployeeId) || workforce.find((entry) => entry.id === 'mike') || workforce[0];
-  const employeeId = employee?.id || 'mike';
+  const employee = workforce.find((entry) => entry.id === requestedEmployeeId) || workforce.find((entry) => entry.id === 'backend_developer') || workforce[0];
+  const employeeId = employee?.id || 'backend_developer';
   const employeeName = employee?.name || 'The engineering employee';
   const repository = extractGitHubRepository(question);
   const filePath = extractRequestedFilePath(question);
@@ -3249,7 +3158,7 @@ async function propagateCompanyGoogleConnection(connection: TenantConnector) {
   return created;
 }
 
-async function readGoogleSheetValues(companyId: string, connectionId: number, sheetReference: string, range?: string, employeeId = 'david') {
+async function readGoogleSheetValues(companyId: string, connectionId: number, sheetReference: string, range?: string, employeeId = 'data_analyst') {
   const { oauth2 } = await getGoogleConnection(companyId, employeeId, connectionId, 'google_sheets');
   const sheets = google.sheets({ version: 'v4', auth: oauth2 });
   const spreadsheetId = parseSpreadsheetId(sheetReference);
@@ -3262,7 +3171,7 @@ async function readGoogleSheetValues(companyId: string, connectionId: number, sh
   return { spreadsheet_id: spreadsheetId, title: metadata.data.properties?.title || 'Google Sheet', range: boundedRange, values };
 }
 
-async function searchGmail(companyId: string, connectionId: number, query: string, maxResults = 10, employeeId = 'david') {
+async function searchGmail(companyId: string, connectionId: number, query: string, maxResults = 10, employeeId = 'data_analyst') {
   const { oauth2 } = await getGoogleConnection(companyId, employeeId, connectionId, 'google_gmail');
   const gmail = google.gmail({ version: 'v1', auth: oauth2 });
   const listed = await gmail.users.messages.list({ userId: 'me', q: String(query || '').slice(0, 500), maxResults: Math.min(Math.max(Number(maxResults) || 10, 1), 10) });
@@ -3286,7 +3195,7 @@ async function searchGoogleDriveFiles(companyId: string, employeeId: string, con
 
 const EMAIL_ADDRESS_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 
-function emailDraftFromRequest(question: string, companyName: string, senderName = 'Sarah') {
+function emailDraftFromRequest(question: string, companyName: string, senderName = 'Caveworkers Manager') {
   const recipients = Array.from(new Set((question.match(EMAIL_ADDRESS_PATTERN) || []).map((email) => email.toLowerCase()))).slice(0, 10);
   const safeLine = (value: string, limit: number) => value.replace(/[\r\n]+/g, ' ').trim().slice(0, limit);
   const subjectMatch = question.match(/(?:subject|re)\s*[:\-]\s*([^\n.]{3,160})/i);
@@ -3324,11 +3233,11 @@ async function findGmailSendConnection(companyId: string, employeeId: string) {
   return null;
 }
 
-async function prepareEmployeeEmailAction(companyId: string, question: string, taskId: number, requestedEmployeeId = 'sarah') {
+async function prepareEmployeeEmailAction(companyId: string, question: string, taskId: number, requestedEmployeeId = 'qa_engineer') {
   const workforce = activeWorkforce(companyId);
-  const employee = workforce.find((entry) => entry.id === requestedEmployeeId) || workforce.find((entry) => entry.id === 'sarah') || EMPLOYEE_CATALOG.find((entry) => entry.id === 'sarah');
-  const employeeId = employee?.id || 'sarah';
-  const employeeName = employee?.name || 'Sarah';
+  const employee = workforce.find((entry) => entry.id === requestedEmployeeId) || workforce.find((entry) => entry.id === 'qa_engineer') || EMPLOYEE_CATALOG.find((entry) => entry.id === 'qa_engineer');
+  const employeeId = employee?.id || 'qa_engineer';
+  const employeeName = employee?.name || 'Caveworkers Manager';
   const company = db.companies.get(companyId);
   const draft = emailDraftFromRequest(question, company?.name || 'your workspace', employeeName);
   if (!draft.recipients.length) return { status: 'blocked' as const, summary: `${employeeName} prepared the work but cannot draft an executable email because no recipient address was included. Add a recipient such as name@company.com and try again.` };
@@ -3407,7 +3316,7 @@ async function dispatchApprovedEmployeeEmail(approval: ApprovalRecord) {
   if (!recipients.length || recipients.length > 10) throw new Error('The approved email has no valid recipients. Create a new draft with up to 10 valid email addresses.');
   approval.payload = { ...payload, execution_status: 'processing' };
   await persistApprovalRecord(approval);
-  const employeeId = typeof payload.employee_id === 'string' && EMPLOYEE_CATALOG.some((employee) => employee.id === payload.employee_id) ? payload.employee_id : approval.employee_id || 'sarah';
+  const employeeId = typeof payload.employee_id === 'string' && EMPLOYEE_CATALOG.some((employee) => employee.id === payload.employee_id) ? payload.employee_id : approval.employee_id || 'qa_engineer';
   const mailboxEmployeeId = typeof payload.mailbox_employee_id === 'string' && EMPLOYEE_CATALOG.some((employee) => employee.id === payload.mailbox_employee_id) ? payload.mailbox_employee_id : employeeId;
   let result: Record<string, string>;
   if (payload.transport === 'smtp') {
@@ -3433,16 +3342,16 @@ async function recordWorkforceApprovalOutcome(approval: ApprovalRecord, status: 
   if (!task || task.company_id !== approval.company_id) return;
   task.execution = { action_type: String(approval.payload?.action_type || 'external.action'), status, summary: summary.slice(0, 1200), updated_at: new Date().toISOString(), result };
   const answerBeforeExecutionUpdate = String(task.answer || '').split(/\n\n[^\n]+ execution update:/)[0].trim();
-  task.answer = `${answerBeforeExecutionUpdate}\n\n${task.direct_employee_id ? (EMPLOYEE_CATALOG.find((employee) => employee.id === task.direct_employee_id)?.name || 'Employee') : 'Sarah'}’s execution update: ${status === 'succeeded' ? 'COMPLETED' : status === 'failed' ? 'FAILED' : status === 'blocked' ? 'BLOCKED' : status.toUpperCase()} — ${summary.slice(0, 1200)}`;
+  task.answer = `${answerBeforeExecutionUpdate}\n\n${task.direct_employee_id ? (EMPLOYEE_CATALOG.find((employee) => employee.id === task.direct_employee_id)?.name || 'Employee') : 'Caveworkers Manager'}’s execution update: ${status === 'succeeded' ? 'COMPLETED' : status === 'failed' ? 'FAILED' : status === 'blocked' ? 'BLOCKED' : status.toUpperCase()} — ${summary.slice(0, 1200)}`;
   task.status = status === 'succeeded' || status === 'cancelled' ? 'completed' : status === 'failed' ? 'failed' : status === 'blocked' ? 'blocked' : 'pending_approval';
-  const actor = EMPLOYEE_CATALOG.find((employee) => employee.id === approval.payload?.employee_id) || EMPLOYEE_CATALOG.find((employee) => employee.id === 'sarah');
+  const actor = EMPLOYEE_CATALOG.find((employee) => employee.id === approval.payload?.employee_id) || EMPLOYEE_CATALOG.find((employee) => employee.id === 'qa_engineer');
   const directFinalAnswer = [...(task.trace || [])].reverse().find((message: any) => message?.kind === 'final_answer' && message?.sender_id === task.direct_employee_id);
   if (directFinalAnswer) directFinalAnswer.body = task.answer;
-  task.trace = [...(task.trace || []), { kind: status === 'succeeded' ? 'action_completed' : status === 'cancelled' ? 'approval_declined' : status === 'failed' || status === 'blocked' ? 'action_failed' : 'action_update', sender: actor?.name || 'Sarah', sender_id: actor?.id || 'sarah', receiver: 'Company room', receiver_id: 'company-room', body: summary.slice(0, 1200), created_at: new Date().toISOString() }];
+  task.trace = [...(task.trace || []), { kind: status === 'succeeded' ? 'action_completed' : status === 'cancelled' ? 'approval_declined' : status === 'failed' || status === 'blocked' ? 'action_failed' : 'action_update', sender: actor?.name || 'Caveworkers Manager', sender_id: actor?.id || 'qa_engineer', receiver: 'Company room', receiver_id: 'company-room', body: summary.slice(0, 1200), created_at: new Date().toISOString() }];
   task.completed_at = new Date().toISOString();
   db.tasks.set(task.id, task);
   await persistTaskRecord(task);
-  await persistActivityLog(approval.company_id, { id: Date.now(), sender: actor?.name || 'Sarah', receiver: 'Manager', kind: `task.execution.${status}`, body: `Task #${task.id}: ${summary.slice(0, 900)}`, created_at: new Date().toISOString() });
+  await persistActivityLog(approval.company_id, { id: Date.now(), sender: actor?.name || 'Caveworkers Manager', receiver: 'Manager', kind: `task.execution.${status}`, body: `Task #${task.id}: ${summary.slice(0, 900)}`, created_at: new Date().toISOString() });
   emitWorkroomEvent(approval.company_id, task.id, { type: 'task_update', task: workroomSnapshot(task) });
 }
 
@@ -3535,11 +3444,11 @@ async function persistAnalystApproval(approval: ApprovalRecord) {
 async function loadAnalystApprovals(companyId: string): Promise<ApprovalRecord[]> {
   await hydrateTenantApprovals(companyId);
   db.analystApprovalsLoaded.add(companyId);
-  return Array.from(db.approvals.values()).filter((approval) => approval.company_id === companyId && approval.employee_id === 'david');
+  return Array.from(db.approvals.values()).filter((approval) => approval.company_id === companyId && approval.employee_id === 'data_analyst');
 }
 
 function analystSourceSummary(sourceRecord: AnalystDataSource | undefined): string {
-  if (!sourceRecord) return 'No live data source is connected. David will prepare a transparent preview and state which source is needed to verify it.';
+  if (!sourceRecord) return 'No live data source is connected. Maya will prepare a transparent preview and state which source is needed to verify it.';
   if (sourceRecord.kind === 'csv') return `CSV source “${sourceRecord.name}” is connected read-only with ${Number(sourceRecord.metadata?.row_count || 0)} imported rows.`;
   return `${sourceRecord.kind === 'sql' ? 'SQL' : 'Google Sheets'} source “${sourceRecord.name}” is registered read-only but needs secure configuration before a live query can run.`;
 }
@@ -5301,82 +5210,14 @@ app.post('/api/employees/:id/conversation', async (req, res) => {
     : 'No prior memory logged.';
 
   let botAnswer = '';
-  const conversationPrompt = `${empCatalog.system_prompt}
+  const adkDefinition = getAdkEmployeeDefinition(empId);
+  const conversationPrompt = `${adkDefinition?.instruction || empCatalog.system_prompt}
 Role: ${empCatalog.role} (${empCatalog.employee_code || empId.toUpperCase()})
 Department: ${empCatalog.department}
-Autonomy Level: ${empCatalog.autonomy_level || 'Level 3'}
-Attached Tools: ${empCatalog.default_tools.join(', ')}
-Active teammate context: ${(db.orgEmployees.get(companyId) || []).filter((entry) => entry.id !== empId).map((entry) => `${entry.name} (${entry.role})`).join(', ') || 'No other activated teammates'}
+Authority boundary: ${adkDefinition?.allowedCapabilities.join(', ') || empCatalog.default_tools.join(', ')}
+Approval boundary: ${adkDefinition?.approvalCapabilities.join(', ') || 'platform policy'}
+Forbidden capabilities: ${adkDefinition?.forbiddenCapabilities.join(', ') || 'cross-tenant access and unverified external actions'}
 
-[ISOLATED COMPANY & USER MEMORY]
-User / Manager: ${user.display_name || user.email || 'Manager'} (${user.user_role || 'Workspace Manager'})
-Company Name: ${activeCompany?.name || user.company_name || 'Workspace'}
-Industry: ${activeCompany?.industry || 'Not specified'} | Team Size: ${activeCompany?.team_size || 'Not specified'}
-Business Objectives: ${activeCompany?.business_goals || activeCompany?.description || 'N/A'}
-Workspace Guidelines: ${activeCompany?.workspace_guidelines || activeCompany?.guidelines || 'N/A'}
-Role Memory Records for ${empName}:
-${memoryPromptStr}
-${empId === 'sarah' ? `Sarah operating contract:
-- You are the workforce manager and the single point of accountability for the client.
-- First understand the requested outcome and identify missing inputs before any tool call.
-- Delegate to one clear specialist when domain expertise is needed, and explain the handoff in one sentence.
-- Report only what is verified. If work is blocked, say exactly what is missing and ask one precise question.
-- Use short workplace messages: answer, progress, blocker, or next action. Never write a report, checklist, fake attachment, or invented delivery confirmation.` : empId === 'alex' ? `Alex operating contract:
-- You are the operations manager responsible for turning requests into executable work.
-- First extract the outcome, owner, deadline, dependencies, and definition of done.
-- Ask one precise question if a critical input is missing; do not invent a deadline, recipient, task owner, or provider result.
-- When ready, state the next three operating steps and use the tenant-approved connector tool belt.
-- Coordinate David for metrics, Mike for technical work, Iris for risk and access, and Emma for customer impact when relevant.
-- Report in short workplace language using exactly one primary status: planned, working, verified, blocked, or escalated.` : empId === 'mike' ? `Mike operating contract:
-- You are the engineering manager responsible for technical clarity, change safety, and reliable delivery.
-- First classify the request: bug, feature, incident, architecture, release, or infrastructure.
-- Identify affected components, risk level, dependencies, and required reviewers before acting.
-- Use only the tenant-approved GitHub MCP, Jira/Linear, Slack, and Notion connectors.
-- Return a technical brief with classification, components, approach, risk, verified evidence, and next checkpoint.
-- Escalate production deployments, database migrations, security patches, access changes, and breaking changes.
-- Never claim a commit, PR, issue, deployment, or CI run completed without a provider result.` : empId === 'emma' ? `Emma operating contract:
-- You are the customer success manager responsible for customer trust, adoption, and clear resolution paths.
-- First classify the request: support, onboarding, account health, renewal, feedback, knowledge, or escalation.
-- Identify the customer or account, issue, business impact, urgency, sentiment, desired outcome, owner, and required evidence.
-- Use only the tenant-approved Gmail, help desk, CRM, Slack, and knowledge-base connectors.
-- Return a customer-success brief with context, verified facts, customer impact, recommended response, owner, and next checkpoint.
-- Escalate refunds, credits, contractual commitments, security or privacy concerns, sensitive data, and mass outbound communication.
-- Never claim a ticket, CRM record, customer message, knowledge-base publication, or resolution completed without a provider result.` : empId === 'arav' ? `Arav operating contract:
-- You are the people operations manager responsible for consistent employee-lifecycle workflows and confidential internal coordination.
-- First classify the request: onboarding, offboarding, policy, leave, engagement, performance support, employee relations, or workforce reporting.
-- Identify the employee or team scope, effective date, manager, required approvals, relevant policy, privacy sensitivity, and required evidence.
-- Use only the tenant-approved HRIS, Gmail, Google Calendar, Drive, Notion, and other explicitly granted connectors.
-- Return a people-operations brief with verified facts, owner, approvals, dependencies, privacy notes, and next checkpoint.
-- Escalate termination, disciplinary, compensation, benefits, medical, protected-class, legal, employee-relations, access, and security decisions.
-- Never claim an employee record, calendar event, policy acknowledgement, or internal message changed without a provider result.` : empId === 'olivia' ? `Olivia operating contract:
-- You are the sales and revenue operations manager responsible for pipeline truth, follow-up discipline, and approval-safe commercial execution.
-- First classify the request: lead qualification, opportunity review, pipeline hygiene, follow-up, renewal or expansion, forecast, or sales reporting.
-- Identify the account and contact, fit, buying signal, stage, decision process, verified amount, next event, owner, confidence, source, and required evidence.
-- Use only the tenant-approved CRM, Gmail, Google Calendar, Google Sheets, and other explicitly granted connectors.
-- Return a sales brief with account context, verified facts, stage and confidence, next action, owner, date, and evidence.
-- Escalate pricing, discounts, contractual commitments, bulk outreach, forecast commitments, and sensitive customer or prospect data.
-- Never claim a CRM update, customer contact, meeting, opportunity movement, forecast result, or commercial commitment without a provider result.` : empId === 'maya' ? `Maya operating contract:
-- You are the marketing and growth manager responsible for measurable demand generation, clear positioning, and brand-safe execution.
-- First classify the request: campaign planning, audience or positioning, content, lifecycle, paid acquisition, performance review, growth experiment, or publishing.
-- Identify the goal, audience, funnel stage, offer, channel, budget, asset needs, success metric, attribution window, approver, and required evidence.
-- Use only the tenant-approved Analytics, Ads, CRM, Google Sheets, Content/Social, and other explicitly granted connectors.
-- Return a marketing brief with strategy, audience, message, channel, metric, owner, approval gate, and next checkpoint.
-- Escalate paid spend, public publishing, regulated or comparative claims, sensitive targeting, customer-data exports, and bulk outreach.
-- Never claim a campaign was published, an ad was launched, spend occurred, or performance changed without a provider result.` : empId === 'priya' ? `Priya operating contract:
-- You are the finance operations manager responsible for accuracy, control checks, cash visibility, and audit-ready execution.
-- First classify the request: invoice or expense, payables, receivables or collections, billing, reconciliation or close, budget or variance, cash flow, payment request, or finance reporting.
-- Identify the entity, counterparty, amount, currency, dates, tax, cost center, PO or receipt, approval state, accounting period, source, and required evidence.
-- Use only the tenant-approved Accounting, Gmail, Google Sheets, Drive/Notion, and other explicitly granted connectors.
-- Return a finance brief with verified facts, control checks, owner, approval gate, exception, and next checkpoint.
-- Escalate payments, refunds, payouts, bank or beneficiary changes, tax, payroll, compensation, write-offs, credit decisions, and external financial reporting.
-- Never claim an invoice was paid, a balance changed, a reconciliation completed, or a financial report updated without a provider result.` : empId === 'iris' ? `Iris operating contract:
-- You are the IT and security operations manager responsible for least privilege, evidence preservation, reversible changes, and clear escalation.
-- First classify the request: access or identity, incident response, vulnerability, IT service or device, compliance or audit, security questionnaire, change control, or vendor and infrastructure risk.
-- Identify the user or asset, system scope, severity, exploitability, business impact, owner, containment or remediation path, evidence, rollback, and approval required.
-- Use only the tenant-approved Identity Provider, ITSM, Endpoint/Security, Gmail, Drive, and other explicitly granted connectors.
-- Return a security brief with verified facts, severity, affected scope, control or remediation path, owner, approval gate, and next checkpoint.
-- Escalate access changes, production or network changes, secret rotation, data deletion, incident communications, and policy exceptions.
-- Never claim access changed, an incident was contained, a patch deployed, or a control passed without a provider result.` : 'Use concise workplace updates and mention a specialist handoff only when it helps.'}
 Never claim an external tool action occurred without an execution trace or verified evidence.
 
 User Manager Message: "${message}"
@@ -5387,33 +5228,7 @@ Respond as ${empName} directly to your manager in plain workplace chat. Keep it 
   botAnswer = modelResult.text;
 
   if (!botAnswer) {
-    botAnswer = empId === 'data_analyst'
-      ? `I can prepare an evidence-first analysis of “${message}”. I’ll state the metric scope, available evidence, assumptions, and limits before recommending a next step. If a source or timeframe is missing, I’ll ask for it explicitly. No data write, payment, or external action has been claimed.`
-      : empId === 'cybersecurity_analyst'
-        ? `I can prepare a security brief for “${message}” with verified scope, severity, evidence, a least-privilege remediation option, rollback, and the approval needed. I will not change access, production controls, or incident status without verified provider evidence.`
-        : empId === 'backend_developer'
-          ? `I can classify “${message}”, map the affected components, and prepare a minimal implementation, test, rollback, and approval plan. I will not claim a repository write, migration, deployment, or payment integration action without verified provider evidence.`
-          : empId === 'qa_engineer'
-            ? `I can turn “${message}” into a test scope with observable acceptance criteria, environment, evidence, coverage gaps, and a release recommendation. I will not claim a test passed, release was approved, or payment flow ran without verified results.`
-      : empId === 'sarah'
-      ? `I’ve got it. I’m taking ownership of “${message}” and will route the right part to the team. If I need a file, recipient, or approval before acting, I’ll ask for that explicitly. No external action has been claimed yet.`
-      : empId === 'alex'
-        ? `I’ve got it. I’ll turn this into an operating plan with an owner, deadline, dependencies, and next checkpoint. If one critical input is missing, I’ll ask for it before using a connector. No external action has been claimed yet.`
-        : empId === 'mike'
-          ? `I’ve got it. I’ll classify this as bug, feature, incident, architecture, release, or infrastructure work and identify the affected components, risk level, dependencies, and required reviewers. If I need a repository URL, issue ID, or approval before using a connector, I’ll ask explicitly. No external action has been claimed yet.`
-          : empId === 'emma'
-            ? `I’ve got it. I’ll classify this as support, onboarding, account health, renewal, feedback, knowledge, or escalation work and identify the customer or account, impact, urgency, sentiment, owner, and required evidence. If I need a ticket ID, account context, recipient, or approval before using a connector, I’ll ask explicitly. No customer action has been claimed yet.`
-              : empId === 'arav'
-                ? `I’ve got it. I’ll classify this as onboarding, offboarding, policy, leave, engagement, performance support, employee relations, or workforce reporting work and identify the employee or team scope, effective date, manager, approvals, privacy sensitivity, and required evidence. If I need an employee ID, policy, date, recipient, or approval before using a connector, I’ll ask explicitly. No employee record or internal action has been claimed yet.`
-                : empId === 'olivia'
-                  ? `I’ve got it. I’ll classify this as lead qualification, opportunity review, pipeline hygiene, follow-up, renewal or expansion, forecast, or sales reporting work and identify the account, contact, stage, buying signal, owner, confidence, next event, and evidence. If I need a CRM record, recipient, meeting details, pricing approval, or connector permission, I’ll ask explicitly. No CRM or customer action has been claimed yet.`
-                  : empId === 'maya'
-                    ? `I’ve got it. I’ll classify this as campaign planning, audience or positioning, content, lifecycle, paid acquisition, performance review, growth experiment, or publishing work and identify the goal, audience, funnel stage, offer, channel, metric, owner, approval gate, and evidence. If I need an analytics view, ad account, content asset, budget, or publishing approval, I’ll ask explicitly. No campaign or public action has been claimed yet.`
-                    : empId === 'priya'
-                      ? `I’ve got it. I’ll classify this as invoice or expense, payables, receivables or collections, billing, reconciliation or close, budget or variance, cash flow, payment request, or finance reporting work and identify the entity, counterparty, amount, currency, dates, approvals, accounting period, and evidence. If I need an invoice, receipt, PO, account, approval, or connector permission, I’ll ask explicitly. No payment, balance change, or accounting action has been claimed yet.`
-                      : empId === 'iris'
-                        ? `I’ve got it. I’ll classify this as access or identity, incident response, vulnerability, IT service or device, compliance or audit, security questionnaire, change control, or vendor and infrastructure risk work and identify the user or asset, system scope, severity, impact, owner, containment or remediation path, approval, and evidence. If I need an account, asset, alert, ticket, log, or approval before using a connector, I’ll ask explicitly. No access or security action has been claimed yet.`
-              : `I’ve received this. I’ll review the ${empCatalog.department.toLowerCase()} part and send Sarah a concise finding or a specific blocker. No external action has been claimed yet.`;
+    botAnswer = `${empName} is ready to handle this ${empCatalog.role.toLowerCase()} request. I will work within my ADK capability boundary, state the evidence and assumptions, and escalate any approval-required action before execution. No external action has been claimed without verified provider evidence.`;
   }
 
   const botMsg = { sender: empId, receiver: 'manager', body: botAnswer, created_at: new Date().toISOString() };
@@ -5436,8 +5251,7 @@ Respond as ${empName} directly to your manager in plain workplace chat. Keep it 
 function activeWorkforce(companyId: string) {
   const activeIds = (db.orgEmployees.get(companyId) || []).map((employee) => employee.id);
   if (!activeIds.length) return [];
-  const workforce = EMPLOYEE_CATALOG.filter((employee) => activeIds.includes(employee.id));
-  return workforce.map((employee) => ({
+  return EMPLOYEE_CATALOG.filter((employee) => activeIds.includes(employee.id)).map((employee) => ({
     id: employee.id,
     employee_code: employee.employee_code,
     name: employee.name,
@@ -5447,46 +5261,17 @@ function activeWorkforce(companyId: string) {
     status: employee.status,
     default_tools: [...employee.default_tools],
     collaborates_with: [...employee.collaborates_with],
-    avatar_url: `/static/assets/employee-avatars/${employee.id}.webp`,
-    capability_summary: employee.id === 'data_analyst'
-      ? 'Turns approved business data into evidence-first KPI, variance, forecasting, and decision-support briefs with assumptions and limits.'
-      : employee.id === 'cybersecurity_analyst'
-        ? 'Turns verified security evidence into least-privilege access, vulnerability, incident, compliance, and remediation briefs with explicit approval gates.'
-        : employee.id === 'backend_developer'
-          ? 'Turns technical requests into safe API, backend, migration, debugging, release, and repository implementation plans with rollback and verification.'
-          : employee.id === 'qa_engineer'
-            ? 'Turns requirements into deterministic test strategy, automation, defect evidence, regression coverage, and release-readiness recommendations.'
-      : employee.id === 'sarah'
-      ? 'Owns intake, delegation, progress updates, approvals, and the final client handoff.'
-      : employee.id === 'alex'
-        ? 'Turns requests into owned workflows, deadlines, dependencies, service levels, handoffs, and verified operational outcomes.'
-        : employee.id === 'mike'
-          ? 'Turns technical requests into classified engineering briefs with risk assessment, component mapping, safe connector execution, and verified repository evidence.'
-          : employee.id === 'emma'
-            ? 'Turns customer requests into evidence-backed support, onboarding, account-health, and escalation briefs with clear customer impact and next steps.'
-              : employee.id === 'arav'
-                ? 'Turns employee-lifecycle and policy requests into privacy-aware people-operations briefs with approvals, dependencies, and verified next steps.'
-              : employee.id === 'olivia'
-                ? 'Turns sales requests into evidence-backed qualification, pipeline, follow-up, renewal, and forecast briefs with clear ownership and approval gates.'
-              : employee.id === 'maya'
-                ? 'Turns growth requests into evidence-backed campaign, audience, content, experiment, and performance briefs with clear metrics and publishing approvals.'
-              : employee.id === 'priya'
-                ? 'Turns finance requests into evidence-backed invoice, expense, payables, cash-flow, variance, and reconciliation briefs with control checks and approval gates.'
-              : employee.id === 'iris'
-                ? 'Turns IT and security requests into least-privilege, evidence-backed access, incident, vulnerability, compliance, and change-control briefs with clear escalation gates.'
-              : `${employee.department} specialist supporting Sarah’s delivery plan.`
+    avatar_url: `/static/assets/employee-avatars/${employee.id === 'backend_developer' ? 'arav' : employee.name.toLowerCase()}.webp`,
+    capability_summary: employee.persona
   }));
 }
+
 
 const WORKFORCE_DOMAINS: Array<{ employeeId: string; keywords: string[] }> = [
   { employeeId: 'data_analyst', keywords: ['data', 'sql', 'revenue', 'forecast', 'kpi', 'margin', 'metric', 'dashboard', 'trend', 'analytics', 'dataset', 'query', 'finance', 'numbers', 'reporting'] },
   { employeeId: 'cybersecurity_analyst', keywords: ['security', 'access', 'identity', 'compliance', 'it', 'device', 'vulnerability', 'risk review', 'permission', 'least privilege', 'role', 'admin', 'privileged', 'sso', 'oauth', 'mfa', '2fa', 'password', 'account', 'offboarding', 'access review', 'audit', 'policy', 'control', 'soc 2', 'iso 27001', 'gdpr', 'dpdp', 'privacy', 'incident', 'cve', 'firewall', 'threat', 'pentest', 'secret', 'token', 'credential'] },
   { employeeId: 'backend_developer', keywords: ['code', 'repo', 'github', 'ci', 'technical', 'engineering', 'bug', 'incident', 'release', 'deploy', 'deployment', 'pull request', 'pr', 'issue', 'sprint', 'architecture', 'refactor', 'migration', 'api', 'service', 'infrastructure', 'devops', 'backend', 'database', 'docker', 'terminal', 'endpoint', 'server', 'full stack'] },
-  { employeeId: 'qa_engineer', keywords: ['qa', 'test', 'automation', 'playwright', 'cypress', 'jest', 'regression', 'selenium', 'e2e', 'unit test', 'integration test', 'verification', 'bug reproduction', 'edge case', 'testing', 'quality', 'reliability', 'flaky'] },
-  { employeeId: 'david', keywords: ['data', 'sql', 'revenue', 'forecast', 'kpi', 'metric', 'dashboard', 'trend', 'analytics'] },
-  { employeeId: 'mike', keywords: ['code', 'repo', 'github', 'api', 'backend', 'engineering'] },
-  { employeeId: 'iris', keywords: ['security', 'access', 'compliance', 'vulnerability'] },
-  { employeeId: 'sarah', keywords: ['qa', 'test', 'quality', 'workflow'] }
+  { employeeId: 'qa_engineer', keywords: ['qa', 'test', 'automation', 'playwright', 'cypress', 'jest', 'regression', 'selenium', 'e2e', 'unit test', 'integration test', 'verification', 'bug reproduction', 'edge case', 'testing', 'quality', 'reliability', 'flaky'] }
 ];
 
 function selectCollaborativeTeam(question: string, companyId: string, preferredEmployeeId?: string) {
@@ -5514,12 +5299,10 @@ function selectCollaborativeTeam(question: string, companyId: string, preferredE
 }
 
 interface WorkforceTaskContext { employee: any; tools: string[]; memory: string[]; connectors: string[]; live_tool_evidence: WorkforceLiveToolEvidence[]; }
-
 async function loadWorkforceTaskContext(companyId: string, employee: any): Promise<WorkforceTaskContext> {
   const instance = (db.orgEmployees.get(companyId) || []).find((entry) => entry.id === employee.id);
   const [memory, connectors] = await Promise.all([loadEmployeeMemory(companyId, employee.id), loadMcpConnections(companyId, employee.id)]);
   const tools = instance?.tools?.length ? instance.tools : employee.default_tools || [];
-  
   const activeConnectorNames = new Set(connectors.filter((connector) => connector.status === 'connected').map((connector) => `${connector.name} (Direct)`));
   const allEmployees = activeWorkforce(companyId);
   for (const emp of allEmployees) {
@@ -5529,7 +5312,6 @@ async function loadWorkforceTaskContext(companyId: string, employee: any): Promi
       activeConnectorNames.add(`${c.name} (${c.oauth_email || 'Workspace Shared'})`);
     });
   }
-
   return {
     employee,
     tools: tools.slice(0, 8),
@@ -5539,22 +5321,10 @@ async function loadWorkforceTaskContext(companyId: string, employee: any): Promi
   };
 }
 
-const EMPLOYEE_COMMUNICATION_FOCUS: Record<string, string> = {
-  data_analyst: 'quantitative analysis, SQL query generation, KPI metrics, and structured financial models',
-  cybersecurity_analyst: 'infrastructure protection, access audits, zero-trust controls, and compliance',
-  backend_developer: 'REST/GraphQL APIs, backend architecture, database queries, and CI/CD pipelines',
-  qa_engineer: 'automated test suites, regression testing, bug verification, and software reliability',
-  sarah: 'intake, delegation, approvals, and the final manager handoff',
-  david: 'metrics, trends, dashboards, and decision-ready analysis',
-  alex: 'owners, deadlines, dependencies, service levels, and operational handoffs',
-  mike: 'technical planning, repositories, incidents, architecture, and release safety',
-  emma: 'customer context, adoption, support quality, and account health',
-  arav: 'employee lifecycle, policy coordination, and confidential people operations',
-  olivia: 'qualification, pipeline truth, follow-up, renewals, and forecast evidence',
-  maya: 'positioning, campaigns, content, experiments, and measurable growth',
-  priya: 'invoices, controls, cash visibility, reconciliation, and finance exceptions',
-  iris: 'least privilege, incidents, vulnerabilities, compliance, and safe change control'
-};
+const EMPLOYEE_COMMUNICATION_FOCUS: Record<string, string> = Object.fromEntries(
+  ADK_EMPLOYEE_DEFINITIONS.map((definition) => [definition.id, definition.mission.toLowerCase()])
+);
+
 
 function employeeIntroduction(employee: any) {
   const focus = EMPLOYEE_COMMUNICATION_FOCUS[employee.id] || `${employee.department.toLowerCase()} delivery`;
@@ -5570,16 +5340,16 @@ function collaborationFinding(employee: any, question: string, context?: Workfor
   const evidenceNote = context?.live_tool_evidence?.length ? ` Live MCP evidence: ${context.live_tool_evidence.map((entry) => `${entry.tool_name} (${entry.status}) — ${entry.summary.slice(0, 260)}`).join(' | ')}` : '';
   const evidence = context?.live_tool_evidence?.length ? ` Evidence: ${context.live_tool_evidence.map((entry) => `${entry.tool_name} is ${entry.status} — ${entry.summary.slice(0, 180)}`).join('; ')}` : '';
   
-  if (employee.id === 'data_analyst' || employee.id === 'maya' || employee.id === 'david') {
+  if (employee.id === 'data_analyst') {
     return `I performed quantitative data analysis on "${topic}". I'm sharing key KPI trends, metric variance, and structured data briefs with ${recipient}${context?.live_tool_evidence?.length ? ' along with query results from connected Sheets/SQL' : ''}.${toolNote}${connectorNote}${memoryNote}${evidence}`;
   }
-  if (employee.id === 'cybersecurity_analyst' || employee.id === 'iris') {
+  if (employee.id === 'cybersecurity_analyst') {
     return `I evaluated the security and compliance aspects of "${topic}". I'm sharing an access control audit, vulnerability risk breakdown, and zero-trust guidelines with ${recipient}${context?.live_tool_evidence?.length ? ' along with security scanner evidence' : ''}.${toolNote}${connectorNote}${memoryNote}${evidence}`;
   }
-  if (employee.id === 'backend_developer' || employee.id === 'arav' || employee.id === 'mike') {
+  if (employee.id === 'backend_developer') {
     return `I reviewed the system architecture and API design for "${topic}". I'm providing ${recipient} with an engineering brief covering API endpoints, database schema impacts, and CI/CD safeguards${context?.live_tool_evidence?.length ? ' along with repository evidence' : ''}.${toolNote}${connectorNote}${memoryNote}${evidence}`;
   }
-  if (employee.id === 'qa_engineer' || employee.id === 'priya' || employee.id === 'sarah') {
+  if (employee.id === 'qa_engineer') {
     return `I designed automated test strategies and reliability checks for "${topic}". I'm providing ${recipient} with test coverage matrices, regression analysis, and edge-case defect summaries${context?.live_tool_evidence?.length ? ' along with test runner logs' : ''}.${toolNote}${connectorNote}${memoryNote}${evidence}`;
   }
   return `I reviewed the ${employee.department.toLowerCase()} aspects of "${topic}". I'm sharing a structured brief with ${recipient}.${toolNote}${connectorNote}${memoryNote}${evidence}`;
@@ -5697,8 +5467,13 @@ async function handleTaskRoutingAsync(question: string, companyId: string, prefe
   const narrative = await generateWorkforceNarrative(
     `${directEmployeeId ? `Assigned Specialist: ${lead.name} (${lead.role})\nRespond directly to the manager as ${lead.name}.\n` : `Manager: ${manager.name} (${manager.role})\nDelivery lead: ${lead.name} (${lead.role})\n`}Task: "${question}"\n\nActive specialist evidence:\n${teamBrief}\n\nWorkspace knowledge:\n${knowText}\n\nWrite a concise workplace chat update for the manager. Use plain language and short paragraphs, not a report, checklist, Markdown headings, or a long preamble. Start with either the answer, a single precise question if required information is missing, or a single clear blocker. Then state what the team did, what is actually verified, and the next action. Mention the delivery lead and contributors naturally. Never invent an attachment, file, message body, link, recipient, tool call, or completed external action. Do not claim that an email, write, payment, publication, access change, or other external action happened unless execution evidence explicitly confirms it. Keep the update under 120 words unless the user asks for detail.`,
     companyId,
-    directEmployeeId || lead.id
+    directEmployeeId || lead.id,
+    taskId
   );
+  if (narrative.provider === 'google_adk') {
+    const adkAuthors = [...new Set((narrative.adk_events || []).map((event) => event.author).filter(Boolean))];
+    trace.push({ kind: 'adk_orchestration', thread_role: 'manager', sender: 'Caveworkers Manager', receiver: 'Company workroom', sender_id: 'caveworkers_manager', receiver_id: 'company-room', body: `Google ADK manager synthesized the workforce response using the assigned specialist context. Model: ${narrative.model || 'configured ADK model'}. Agent path: ${adkAuthors.join(' → ') || 'manager'}.`, created_at: new Date(Date.now() + 2600).toISOString() });
+  }
   let answer = narrative.text;
   if (!answer) {
     answer = `I’ve routed this to ${lead.name}, with ${collaborators.length ? collaborators.map((employee) => employee.name).join(' and ') + ' supporting.' : 'team coordinating the work.'}
@@ -5890,7 +5665,7 @@ app.post('/api/approvals/:id', async (req, res) => {
 
   if (approval.payload?.origin === 'analyst') {
     await persistAnalystApproval(approval);
-    await persistActivityLog(companyId, { id: Date.now(), sender: 'Manager', receiver: 'David', kind: approval.status === 'approved' ? 'analyst.action_authorized' : 'analyst.action_declined', body: approval.status === 'approved' ? `Approved analyst draft for ${approval.tool_name}. No external dispatch occurs until that connector is configured.` : `Declined analyst draft for ${approval.tool_name}.`, created_at: new Date().toISOString() });
+    await persistActivityLog(companyId, { id: Date.now(), sender: 'Manager', receiver: 'Maya', kind: approval.status === 'approved' ? 'analyst.action_authorized' : 'analyst.action_declined', body: approval.status === 'approved' ? `Approved analyst draft for ${approval.tool_name}. No external dispatch occurs until that connector is configured.` : `Declined analyst draft for ${approval.tool_name}.`, created_at: new Date().toISOString() });
     return res.json({ ok: true, approval, execution: { status: approval.status === 'approved' ? 'authorized' : 'cancelled' } });
   }
 
@@ -5898,7 +5673,7 @@ app.post('/api/approvals/:id', async (req, res) => {
     if (approval.status === 'rejected') {
       approval.payload = { ...(approval.payload || {}), execution_status: 'cancelled' };
       await persistApprovalRecord(approval);
-      const summary = 'You declined this external action. Sarah kept the work product and did not perform any external change.';
+      const summary = 'You declined this external action. Caveworkers Manager kept the work product and did not perform any external change.';
       await recordWorkforceApprovalOutcome(approval, 'cancelled', summary);
       return res.json({ ok: true, approval, execution: { status: 'cancelled', summary } });
     }
@@ -5940,7 +5715,7 @@ app.post('/api/approvals/:id', async (req, res) => {
     }
     approval.payload = { ...(approval.payload || {}), execution_status: 'blocked' };
     await persistApprovalRecord(approval);
-    const summary = `You approved ${approval.tool_name}, but Caveworkers has no configured execution adapter for this action. Sarah did not perform an external change.`;
+    const summary = `You approved ${approval.tool_name}, but Caveworkers has no configured execution adapter for this action. Caveworkers Manager did not perform an external change.`;
     await recordWorkforceApprovalOutcome(approval, 'blocked', summary);
     return res.status(409).json({ error: summary, approval, execution: { status: 'blocked', summary } });
   }
@@ -5949,16 +5724,16 @@ app.post('/api/approvals/:id', async (req, res) => {
   res.json({ ok: true, approval });
 });
 
-// ── DATA ANALYST (DAVID / DATA ANALYST) ───────────────────────────────────
+// ── DATA ANALYST (MAYA / DATA ANALYST) ───────────────────────────────────
 app.get('/api/analyst/profile', async (req, res) => {
   const user = getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Authentication required' });
   const companyId = getUserWorkspaceId(user);
-  const analyst = EMPLOYEE_CATALOG.find((employee) => employee.id === 'data_analyst' || employee.id === 'david') || EMPLOYEE_CATALOG[0];
-  const employee = (db.orgEmployees.get(companyId) || []).find((entry) => entry.id === 'data_analyst' || entry.id === 'david');
+  const analyst = EMPLOYEE_CATALOG.find((employee) => employee.id === 'data_analyst') || EMPLOYEE_CATALOG[0];
+  const employee = (db.orgEmployees.get(companyId) || []).find((entry) => entry.id === 'data_analyst');
   const sources = await loadAnalystDataSources(companyId);
   const memory = await loadAnalystMemory(companyId, 'long_term');
-  const [c1, c2] = await Promise.all([loadMcpConnections(companyId, 'data_analyst'), loadMcpConnections(companyId, 'david')]);
+  const [c1, c2] = await Promise.all([loadMcpConnections(companyId, 'data_analyst'), loadMcpConnections(companyId, 'data_analyst')]);
   const connectors = [...c1, ...c2.filter((c) => !c1.some((e) => e.id === c.id))];
   res.json({ employee: analyst, active_in_workspace: Boolean(employee), configured_tools: employee?.tools || analyst?.default_tools || [], connectors: connectors.map(connectorPublicView), model: { provider: OPENROUTER_KEY_READY ? 'OpenRouter' : (genAIClient ? 'Gemini fallback' : 'Preview planner'), name: OPENROUTER_KEY_READY ? ANALYST_MODEL : 'Configure OPENROUTER_API_KEY for Qwen3' }, source_count: sources.length, memory_count: memory.length, safety: { read_only_by_default: true, external_actions_require_approval: true, tenant_scoped: true } });
 });
@@ -5982,16 +5757,16 @@ app.post('/api/analyst/data-sources', async (req, res) => {
   let metadata: Record<string, any> = {}; let status: AnalystDataSource['status'] = 'needs_configuration'; let sourceName = String(name || database_label || sheet_url || '').trim();
   if (kind === 'csv') { try { metadata = parseCsvPreview(csv_text); status = 'connected'; sourceName = sourceName || 'Imported CSV'; } catch (error: any) { return res.status(400).json({ error: error.message || 'Unable to read this CSV.' }); } }
   else if (kind === 'google_sheets') {
-    const connections = await loadMcpConnections(companyId, 'david');
+    const connections = await loadMcpConnections(companyId, 'data_analyst');
     const sheetsConnection = connections.find((entry) => entry.connection_type === 'google_sheets' && entry.status === 'connected' && entry.tool_grants.some((grant) => grant.tool_name === 'sheets.read'));
-    if (!sheetsConnection) return res.status(409).json({ error: 'Connect a Google Sheets account for David before registering a live Sheets source.' });
+    if (!sheetsConnection) return res.status(409).json({ error: 'Connect a Google Sheets account for Maya before registering a live Sheets source.' });
     metadata = { sheet_url: String(sheet_url || '').trim(), connection_id: sheetsConnection.id };
     status = 'connected';
   } else metadata = { database_label: String(database_label || name || '').trim() };
   const now = new Date().toISOString();
   const sourceRecord: AnalystDataSource = { id: `source_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`, company_id: companyId, kind, name: sourceName, status, access_level: 'read_only', metadata, created_at: now, updated_at: now };
   await persistAnalystDataSource(sourceRecord);
-  res.status(201).json({ ok: true, source: sourceRecord, notice: status === 'connected' ? (kind === 'google_sheets' ? 'Google Sheets is connected read-only and can be queried by David.' : 'CSV imported as a tenant-scoped read-only source.') : 'Connection shell saved. Add secure OAuth or read-only database credentials before live data can be queried.' });
+  res.status(201).json({ ok: true, source: sourceRecord, notice: status === 'connected' ? (kind === 'google_sheets' ? 'Google Sheets is connected read-only and can be queried by Maya.' : 'CSV imported as a tenant-scoped read-only source.') : 'Connection shell saved. Add secure OAuth or read-only database credentials before live data can be queried.' });
 });
 
 app.delete('/api/analyst/data-sources/:id', async (req, res) => {
@@ -6053,7 +5828,7 @@ app.post('/api/analyst/analyze', async (req, res) => {
   const user = getAuthUser(req); if (await enforceWorkspaceAccess(req, res)) return;
   const companyId = getUserWorkspaceId(user);
   try { const run = await runAnalystLoop({ companyId, managerName: user?.display_name || 'Workspace Manager', question: req.body?.question, sourceId: req.body?.source_id, outputFormat: req.body?.output_format }); res.status(201).json({ ok: true, run }); }
-  catch (error: any) { res.status(400).json({ error: error?.message || 'David could not start the analysis.' }); }
+  catch (error: any) { res.status(400).json({ error: error?.message || 'Maya could not start the analysis.' }); }
 });
 
 app.get('/api/tools', (_req, res) => {
@@ -6421,7 +6196,7 @@ app.get('/api/employees/:id/mcp-connections/:connectionId/google/start', async (
   <div style="background:#161b22;border:1px solid #30363d;border-radius:16px;box-shadow:0 12px 32px rgba(0,0,0,0.3);padding:32px;max-width:460px;width:100%;text-align:center;">
     <div style="width:52px;height:52px;border-radius:14px;background:#21262d;border:1px solid #30363d;display:inline-flex;align-items:center;justify-content:center;margin-bottom:16px;font-size:26px;">🏢</div>
     <h2 style="font-size:20px;font-weight:700;color:#f0f6fc;margin-bottom:8px;">Connect Google ${serviceName}</h2>
-    <p style="font-size:14px;color:#8b949e;line-height:1.5;margin-bottom:20px;">Authorize Caveworkers to access Google ${serviceName} so Sarah and your AI specialists can review emails, documents, or spreadsheets upon your request.</p>
+    <p style="font-size:14px;color:#8b949e;line-height:1.5;margin-bottom:20px;">Authorize Caveworkers to access Google ${serviceName} so Caveworkers Manager and your AI specialists can review emails, documents, or spreadsheets upon your request.</p>
     
     <div style="background:#0d1117;border:1px solid #30363d;border-radius:10px;padding:12px;margin-bottom:20px;text-align:left;font-size:12px;color:#8b949e;line-height:1.4;">
       <b style="color:#58a6ff;display:block;margin-bottom:4px;">💡 If Google shows a caution / verification warning:</b>
@@ -6613,7 +6388,7 @@ app.delete('/api/employees/:id/mcp-connections/:connectionId', async (req, res) 
 app.get('/api/analyst/connectors', async (req, res) => {
   const user = getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Authentication required' });
-  const connections = await loadMcpConnections(getUserWorkspaceId(user), 'david');
+  const connections = await loadMcpConnections(getUserWorkspaceId(user), 'data_analyst');
   res.json({ connections: connections.map(connectorPublicView) });
 });
 
@@ -6637,7 +6412,7 @@ app.post('/api/analyst/google-sheets/read', async (req, res) => {
   if (await enforceWorkspaceAccess(req, res)) return;
   const companyId = getUserWorkspaceId(user);
   try {
-    const result = await readGoogleSheetValues(companyId, Number(req.body?.connection_id), String(req.body?.sheet_url || ''), req.body?.range, String(req.body?.employee_id || 'david'));
+    const result = await readGoogleSheetValues(companyId, Number(req.body?.connection_id), String(req.body?.sheet_url || ''), req.body?.range, String(req.body?.employee_id || 'data_analyst'));
     res.json({ ok: true, result });
   } catch (error: any) { reportOperationalFailure('connector.google_sheets_read', error, { tenant_hash: anonymizeIdentifier(companyId), request_id: getRequestId(req) }); res.status(502).json({ error: String(error?.message || 'Google Sheets read failed').slice(0, 240), request_id: getRequestId(req) }); }
 });
@@ -6647,7 +6422,7 @@ app.post('/api/analyst/gmail/search', async (req, res) => {
   if (await enforceWorkspaceAccess(req, res)) return;
   const companyId = getUserWorkspaceId(user);
   try {
-    const result = await searchGmail(companyId, Number(req.body?.connection_id), String(req.body?.query || ''), req.body?.max_results, String(req.body?.employee_id || 'david'));
+    const result = await searchGmail(companyId, Number(req.body?.connection_id), String(req.body?.query || ''), req.body?.max_results, String(req.body?.employee_id || 'data_analyst'));
     res.json({ ok: true, result });
   } catch (error: any) { reportOperationalFailure('connector.gmail_search', error, { tenant_hash: anonymizeIdentifier(companyId), request_id: getRequestId(req) }); res.status(502).json({ error: String(error?.message || 'Gmail search failed').slice(0, 240), request_id: getRequestId(req) }); }
 });
@@ -6658,22 +6433,22 @@ app.post('/api/analyst/mcp/call', async (req, res) => {
   const companyId = getUserWorkspaceId(user);
   const connectionId = Number(req.body?.connection_id);
   const toolName = String(req.body?.tool_name || '').trim();
-  const connection = (await loadMcpConnections(companyId, 'david')).find((entry) => entry.id === connectionId && entry.status === 'connected');
+  const connection = (await loadMcpConnections(companyId, 'data_analyst')).find((entry) => entry.id === connectionId && entry.status === 'connected');
   if (!connection || connection.connection_type !== 'streamable_http') return res.status(404).json({ error: 'Connected custom MCP server not found.' });
   const discovered = connection.discovered_tools.find((tool) => tool.name === toolName);
   const grant = connection.tool_grants.find((entry) => entry.tool_name === toolName);
-  if (!discovered || !grant) return res.status(403).json({ error: 'David does not have permission for this MCP tool.' });
+  if (!discovered || !grant) return res.status(403).json({ error: 'Maya does not have permission for this MCP tool.' });
   const args = req.body?.arguments && typeof req.body.arguments === 'object' ? req.body.arguments : {};
   if (discovered.risk === 'write' || isLikelyWriteTool(toolName)) {
     const approvalId = db.nextApprovalId++;
-    await persistAnalystApproval({ id: approvalId, company_id: companyId, task_id: 0, employee_id: 'david', tool_name: toolName, action_summary: `Run ${toolName} on ${connection.name}`, status: 'pending', payload: { origin: 'analyst', mode: 'mcp_tool_call', connector_id: connection.id, arguments: args }, created_at: new Date().toISOString() });
+    await persistAnalystApproval({ id: approvalId, company_id: companyId, task_id: 0, employee_id: 'data_analyst', tool_name: toolName, action_summary: `Run ${toolName} on ${connection.name}`, status: 'pending', payload: { origin: 'analyst', mode: 'mcp_tool_call', connector_id: connection.id, arguments: args }, created_at: new Date().toISOString() });
     return res.status(202).json({ ok: true, status: 'awaiting_approval', approval_id: approvalId, message: 'Write-capable MCP tools always pause for manager approval before execution.' });
   }
   try {
     const initialized = await mcpRpc(connection, 'initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'Caveworkers', version: '1.0.0' } });
     const result = await mcpRpc(connection, 'tools/call', { name: toolName, arguments: args }, initialized.sessionId);
     res.json({ ok: true, result: result.data?.result || result.data });
-  } catch (error: any) { reportOperationalFailure('connector.mcp_tool_call', error, { tenant_hash: anonymizeIdentifier(companyId), employee_id: 'david', tool_name: toolName, request_id: getRequestId(req) }); res.status(502).json({ error: String(error?.message || 'MCP tool call failed').slice(0, 240), request_id: getRequestId(req) }); }
+  } catch (error: any) { reportOperationalFailure('connector.mcp_tool_call', error, { tenant_hash: anonymizeIdentifier(companyId), employee_id: 'data_analyst', tool_name: toolName, request_id: getRequestId(req) }); res.status(502).json({ error: String(error?.message || 'MCP tool call failed').slice(0, 240), request_id: getRequestId(req) }); }
 });
 
 app.get('/api/knowledge', (req, res) => {
@@ -7137,11 +6912,11 @@ app.get('/api/office/status', (req, res) => {
     } else if (index === 0) {
       status = 'working';
       currentTask = 'Analyzing workspace hiring demand & candidate rubrics';
-      collaboratingWith = 'David (Data Analyst)';
+      collaboratingWith = 'Maya (Data Analyst)';
     } else if (index === 1) {
       status = 'working';
       currentTask = 'Querying Q3 SQL sales metrics & operating margins';
-      collaboratingWith = 'Sarah (HR Manager)';
+      collaboratingWith = 'Caveworkers Manager (HR Manager)';
     }
 
     return {

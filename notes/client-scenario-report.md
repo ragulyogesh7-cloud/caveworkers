@@ -15,18 +15,18 @@ The connector scenarios use the existing mocked MCP transport and verified route
 | # | Client scenario | Result | Evidence |
 |---:|---|---|---|
 | 1 | A manager assigns a task to the whole team. | Passed | Only active employees in the authenticated tenant are queued. |
-| 2 | A manager asks Sarah to lead a request. | Passed | Sarah owns the final result and returns a visible manager response. |
-| 3 | An operations request is routed to Alex. | Passed | Specialist routing and safe public capability metadata are exposed. |
-| 4 | An engineering and GitHub incident is routed to Mike. | Passed | Mike’s specialist route and metadata are correct. |
-| 5 | A customer-success request is routed to Emma. | Passed | Emma receives the expected specialist route. |
+| 2 | A manager asks Caveworkers Manager to lead a request. | Passed | Caveworkers Manager owns the final result and returns a visible manager response. |
+| 3 | An operations request is routed to Arav. | Passed | Specialist routing and safe public capability metadata are exposed. |
+| 4 | An engineering and GitHub incident is routed to Arav. | Passed | Arav’s specialist route and metadata are correct. |
+| 5 | A customer-success request is routed to Maya. | Passed | Maya receives the expected specialist route. |
 | 6 | A people-operations request is routed to Arav. | Passed | Arav receives the expected specialist route. |
-| 7 | A sales pipeline request is routed to Olivia. | Passed | Olivia receives the expected specialist route. |
+| 7 | A sales pipeline request is routed to Priya. | Passed | Priya receives the expected specialist route. |
 | 8 | A marketing and growth request is routed to Maya. | Passed | Maya receives the expected specialist route. |
 | 9 | A finance-operations request is routed to Priya. | Passed | Priya receives the expected specialist route. |
 | 10 | An IT and security request is routed to Iris. | Passed | Iris receives the expected specialist route. |
 | 11 | Employees introduce themselves and hand work to one another. | Passed | Addressed handoffs and employee communication remain visible in the curated Company Room trace. |
 | 12 | A user deletes a Company Room message. | Passed | Deletion is tenant-scoped and the private audit trace remains protected. |
-| 13 | Sarah attempts email delivery without Gmail capability. | Passed | The system truthfully blocks delivery instead of pretending the email was sent. |
+| 13 | Caveworkers Manager attempts email delivery without Gmail capability. | Passed | The system truthfully blocks delivery instead of pretending the email was sent. |
 | 14 | A user searches the official MCP Registry. | Passed | Registry results are normalized and include a safe detail link. |
 | 15 | A user opens the connector directory. | Passed | The curated catalog exposes tenant connection state without encrypted credentials. |
 | 16 | A registry advertises a private or unsafe remote. | Passed | The remote is rejected before any connection attempt. |

@@ -25,16 +25,16 @@
 - [x] Commit the legacy-suite fixes and prepare the repository for owner-initiated production publishing.
 - [x] Push the completed workforce and legacy-suite commits to the selected GitHub main branch and confirm the remote commit IDs.
 - [x] Verify the published owner-facing workforce and employee workspace isolation at mycaveworkers.ai.studio without external side effects.
-- [x] Replace stale Sarah, David, and legacy-ten-employee references in the owner-facing four-avatar workforce copy and republish the correction.
-- [x] Define a replaceable AgentRuntime interface and configurable four-employee contracts with employee-scoped skills, tools, limits, and approval policies.
+- [x] Replace stale legacy manager and employee references in the owner-facing four-avatar workforce copy and republish the correction.
+- [x] Define a Google ADK manager and configurable four-employee contracts with employee-scoped skills, tools, limits, and approval policies.
 - [x] Connect agent execution to isolated employee workspaces, task streaming, approval checkpoints, and live Razorpay prohibition.
-- [x] Add a separately deployable internal Cloud Run capability-bridge container, Cloud Build contract, and operator deployment script.
+- [x] Add a tenant-scoped ADK capability boundary and preserve the Cloud Run build/deployment contract.
 - [x] Add direct HTTP regression coverage for private bridge listener startup and static-bearer enforcement.
 - [x] Add the missing public Caveworkers Cloud Run container, build contract, and operator deployment script.
 - [x] Replace the overly broad Firestore client rules with verified company-scoped rules for tenant data, jobs, workflows, and payment records.
 - [ ] Owner-publish the validated no-new-billing candidate through the existing managed publishing interface and verify its live health and four-workspace presentation.
 - [ ] Verify the newly published no-new-billing release health and four-employee presentation without creating a task, payment, connector action, or external side effect.
-- [x] Replace stale public landing-page references to Sarah, David, Alex, and a three-person legacy crew with the approved four employee roles and safety boundary.
+- [x] Replace stale public landing-page references with the approved four ADK employee roles and safety boundary.
 - [x] Add a regression test that prevents legacy employees, unsupported connector claims, and fabricated live-performance metrics from returning to the public landing page.
 - [x] Allow general company-room messages while retaining owner-approved plan gates for role-specific work queueing.
 - [x] Repair the company-room composer so Send note and Start the work remain legible and responsive at desktop and mobile widths.

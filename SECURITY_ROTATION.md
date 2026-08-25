@@ -6,7 +6,7 @@ Do not paste secrets into GitHub, issue trackers, chat, task payloads, Docker bu
 
 ## Secret-generation command
 
-Generate random application secrets with Node.js 22:
+Generate random application secrets with Node.js 24:
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"

@@ -12,7 +12,7 @@
 
 The approval lifecycle and Company Room approval visibility fixes are published on `main` at commit `6e81dc9`.
 
-The implementation now keeps blocked connector actions out of the approval queue, records a blocked audit trace, prefixes Sarah’s task answer with `BLOCKED —`, hydrates tenant approvals before task and Company Room reads, and attaches the real pending approval id to Sarah’s final-answer message and task snapshot. The regression suite contains 32 passing tests.
+The implementation now keeps blocked connector actions out of the approval queue, records a blocked audit trace, prefixes Caveworkers Manager’s task answer with `BLOCKED —`, hydrates tenant approvals before task and Company Room reads, and attaches the real pending approval id to Caveworkers Manager’s final-answer message and task snapshot. The regression suite contains 32 passing tests.
 
 ## Cloud Run variables and secrets
 
@@ -56,15 +56,15 @@ Add `caveworkers.ai.studio` to the authorized domains. Enable the Gmail API and,
 
 Deploy a new Cloud Run revision with the variables and secrets above. Confirm the health endpoint reports the expected Firebase, model, and OAuth readiness rather than `unconfigured` or `degraded` for components required by the test.
 
-Sign in to the production Caveworkers tenant, open **Settings → Tools**, select Sarah, add a Google Gmail connection, enable send permission, save it, and use **Connect Google**. The browser should reach Google consent and return to the Company Room without a missing-client-credentials response.
+Sign in to the production Caveworkers tenant, open **Settings → Tools**, select Caveworkers Manager, add a Google Gmail connection, enable send permission, save it, and use **Connect Google**. The browser should reach Google consent and return to the Company Room without a missing-client-credentials response.
 
 Then submit this test request in the Company Room:
 
 ```text
-Sarah, prepare a concise company report for nothern enterprices, send it to ragulyogesh7@gmail.com using your connected Gmail after approval, and commit the report to ragulyogesh7-cloud/mycaveworkers.
+Caveworkers Manager, prepare a concise company report for nothern enterprices, send it to ragulyogesh7@gmail.com using your connected Gmail after approval, and commit the report to ragulyogesh7-cloud/mycaveworkers.
 ```
 
-Verify the following sequence: Sarah’s task reaches `pending_approval`; the right-side queue shows the Gmail and/or GitHub action; Sarah’s final-answer message contains an **Approve** control tied to the same approval id; approving Gmail produces a confirmed provider message id; approving the GitHub action produces a confirmed commit SHA; and the task answer is updated with the final execution result. If a connector is not configured, the task must instead be visibly `BLOCKED` with no phantom approval item.
+Verify the following sequence: Caveworkers Manager’s task reaches `pending_approval`; the right-side queue shows the Gmail and/or GitHub action; Caveworkers Manager’s final-answer message contains an **Approve** control tied to the same approval id; approving Gmail produces a confirmed provider message id; approving the GitHub action produces a confirmed commit SHA; and the task answer is updated with the final execution result. If a connector is not configured, the task must instead be visibly `BLOCKED` with no phantom approval item.
 
 ## Remaining operator-owned launch gates
 

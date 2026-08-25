@@ -10,7 +10,7 @@ Caveworkers will use the official MCP Registry as the machine-readable discovery
 4. The manager chooses a streamable HTTP remote, reviews the endpoint and required secrets, and supplies the tenant-owned endpoint/token or OAuth details. Caveworkers never imports or invents credentials from catalog metadata.
 5. The server validates the remote URL with the existing SSRF guard, encrypts the supplied token, performs a bounded MCP initialize/tools/list health check, and persists a tenant-owned connector in Firestore.
 6. The manager grants discovered tools to one employee, a selected group, or the full active employee roster. Read tools may be granted read-only; write/destructive tools remain approval-required regardless of the client request.
-7. Every employee can use only connectors and tools granted to that employee and tenant. Sarah remains the accountable manager for workforce tasks, and write-capable tool calls create durable approvals and realtime outcomes.
+7. Every employee can use only connectors and tools granted to that employee and tenant. Caveworkers Manager remains the accountable manager for workforce tasks, and write-capable tool calls create durable approvals and realtime outcomes.
 
 ## Safety boundaries
 The Registry is read-only discovery. Registry records are untrusted metadata and are not executed. Only HTTPS streamable HTTP remotes are eligible for directory-assisted connection. Private IPs, localhost, link-local, unsupported schemes, unbounded redirects, and missing endpoint validation remain blocked. Secrets are accepted only from the manager’s connection form, encrypted at rest, and never returned in public connector views. Catalog search is bounded by query length, result count, response size, and timeout.

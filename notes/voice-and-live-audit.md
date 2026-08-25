@@ -5,7 +5,7 @@ Published commit: `f81149734cf5e0141d8a781ba4220d46b81f478a`
 
 ## Live acceptance result
 
-The email was **not sent successfully**. Sarah’s Gmail connector remains unauthenticated because the deployed Cloud Run revision returns:
+The email was **not sent successfully**. Caveworkers Manager’s Gmail connector remains unauthenticated because the deployed Cloud Run revision returns:
 
 ```json
 {"error":"Google OAuth client credentials are not configured."}
@@ -13,13 +13,13 @@ The email was **not sent successfully**. Sarah’s Gmail connector remains unaut
 
 No provider message ID, delivery receipt, or inbox evidence exists. The GitHub report was also **not committed in the live acceptance run**: no commit SHA was visible, and the repository connector remains `needs_configuration`.
 
-The authenticated live tenant currently exposes four active employees—Alex, Emma, Mike, and Sarah—while the Free Trial plan permits two. The billing API itself reports `active_employees: 4`, `max_employees: 2`, and `quota_remaining: 0`. The existing employee-add/select routes enforce the cap for new additions, so the evidence supports a pre-existing over-cap roster rather than a current add-employee bypass. The code now exposes `overage_count`, `legacy_overage`, and `enrollment_locked`, and Settings displays an explicit legacy-overage explanation instead of the confusing sentence “4 of 2 employee slots in use.”
+The authenticated live tenant currently exposes four active employees—Arav, Maya, Arav, and Caveworkers Manager—while the Free Trial plan permits two. The billing API itself reports `active_employees: 4`, `max_employees: 2`, and `quota_remaining: 0`. The existing employee-add/select routes enforce the cap for new additions, so the evidence supports a pre-existing over-cap roster rather than a current add-employee bypass. The code now exposes `overage_count`, `legacy_overage`, and `enrollment_locked`, and Settings displays an explicit legacy-overage explanation instead of the confusing sentence “4 of 2 employee slots in use.”
 
 The live connector inventory showed the following evidence:
 
 | Connector | Live status | Evidence |
 |---|---|---|
-| Sarah Gmail | `needs_configuration` | OAuth missing; send permission record exists but `auth_configured` is false |
+| Caveworkers Manager Gmail | `needs_configuration` | OAuth missing; send permission record exists but `auth_configured` is false |
 | PostgreSQL custom skill | `connected` | Read-only SQL grant and discovered tool present |
 | GitHub Integration custom skill | `connected` | Read and create-PR grants present; no verified commit result from this acceptance run |
 | Git repository | `needs_configuration` | Repository URL present; no auth configured |
@@ -36,13 +36,13 @@ Company Room now includes opt-in voice mode. Every employee has a distinct voice
 
 | Employee | Voice profile |
 |---|---|
-| Sarah | Warm Indian English |
-| David | Measured British English |
-| Alex | Calm American English |
-| Mike | Clear Australian English |
-| Emma | Bright British English |
+| Caveworkers Manager | Warm Indian English |
+| Maya | Measured British English |
+| Arav | Calm American English |
+| Arav | Clear Australian English |
+| Maya | Bright British English |
 | Arav | Confident Indian English |
-| Olivia | Polished Australian English |
+| Priya | Polished Australian English |
 | Maya | Energetic American English |
 | Priya | Grounded Indian English |
 | Iris | Precise British English |
@@ -55,4 +55,4 @@ The final code passed **33/33 regression tests**, TypeScript lint, production bu
 
 ## Deployment gate
 
-The new code is published to GitHub but is not automatically live at `caveworkers.ai.studio`. A new Cloud Run/AI Studio revision must be deployed from `f811497`. Before repeating the acceptance run, inject the Google OAuth client ID and secret, OAuth state secret, production redirect URI, Firebase Admin access, and connector-token encryption key into the revision. Then complete Sarah’s Gmail OAuth, approve the pending Gmail and GitHub actions, and verify a real Gmail provider message ID, inbox receipt, and GitHub commit SHA.
+The new code is published to GitHub but is not automatically live at `caveworkers.ai.studio`. A new Cloud Run/AI Studio revision must be deployed from `f811497`. Before repeating the acceptance run, inject the Google OAuth client ID and secret, OAuth state secret, production redirect URI, Firebase Admin access, and connector-token encryption key into the revision. Then complete Caveworkers Manager’s Gmail OAuth, approve the pending Gmail and GitHub actions, and verify a real Gmail provider message ID, inbox receipt, and GitHub commit SHA.

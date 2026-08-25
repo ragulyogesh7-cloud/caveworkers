@@ -18,7 +18,7 @@ The product promise is simple:
 
 > **Describe the outcome. Caveworkers coordinates the right employees, uses only the tools your company approves, pauses for human approval when an action matters, and shows evidence when the work is truly complete.**
 
-The redesign turns the existing company room into the primary product surface. The user does not begin with a dashboard of disconnected metrics. They enter a living workforce room, assign work in natural language, watch Sarah coordinate specialists, see employees exchange context, review tool calls and approvals, and receive a verifiable result such as a commit SHA, message ID, document URL, calendar event, or spreadsheet range.
+The redesign turns the existing company room into the primary product surface. The user does not begin with a dashboard of disconnected metrics. They enter a living workforce room, assign work in natural language, watch Caveworkers Manager coordinate specialists, see employees exchange context, review tool calls and approvals, and receive a verifiable result such as a commit SHA, message ID, document URL, calendar event, or spreadsheet range.
 
 The premium experience is built around a critical distinction: **animation communicates activity, while evidence communicates truth**. Animated employees, ambient sound, and cinematic transitions create presence and delight. Approval cards, connector scope, execution logs, external identifiers, and failure states create trust.
 
@@ -33,7 +33,7 @@ The product differentiates itself through five connected capabilities:
 | Capability | User value | Product expression |
 |---|---|---|
 | Outcome-based delegation | Users describe what they want without designing every step | One prominent “Assign work” composer with natural-language routing |
-| Visible workforce coordination | Users understand who is working and why | Sarah’s routing message, employee-to-employee thread, presence states, and role colors |
+| Visible workforce coordination | Users understand who is working and why | Caveworkers Manager’s routing message, employee-to-employee thread, presence states, and role colors |
 | Tool execution | Work finishes in the systems the business already uses | Guided connectors, scoped tool grants, real MCP calls, and execution progress |
 | Human control | Important writes do not happen invisibly | Approval gates, exact arguments, risk labels, and approve/reject actions |
 | Verifiable completion | Users know whether work really happened | External IDs, commit SHAs, links, read-back checks, and honest failure states |
@@ -118,7 +118,7 @@ The product uses a focused left rail on desktop and a compact bottom or drawer n
 |---|---|
 | Company room | Assign work, watch collaboration, review approvals, and inspect evidence |
 | Employee workspace | Inspect one employee’s role, history, tools, and current work |
-| Data lab | David’s focused analyst surface for data tasks and insights |
+| Data lab | Maya’s focused analyst surface for data tasks and insights |
 | Settings | Workspace, team, connectors, permissions, billing, and security |
 | Sign out | End the authenticated session safely |
 
@@ -126,7 +126,7 @@ The product uses a focused left rail on desktop and a compact bottom or drawer n
 
 The company room has three layers:
 
-1. **Conversation stage:** A large, readable, realtime group thread showing manager requests, Sarah’s routing, employee collaboration, tool activity, approvals, and final results.
+1. **Conversation stage:** A large, readable, realtime group thread showing manager requests, Caveworkers Manager’s routing, employee collaboration, tool activity, approvals, and final results.
 2. **Execution rail:** A compact progress surface showing the current task phase, active connectors, tool calls, approval state, and evidence availability.
 3. **Work composer:** A persistent, high-contrast input dock for assigning work, selecting Auto-route, Whole team, or an individual employee, and submitting the request.
 
@@ -179,13 +179,13 @@ Each employee has a stable color, role label, avatar/orb silhouette, status voca
 
 | Employee | Primary identity | Suggested accent |
 |---|---|---|
-| Sarah | Workforce coordinator and HR manager | Electric cyan |
-| David | Data analyst and insight specialist | Violet |
-| Alex | Product and research specialist | Amber |
-| Mike | Engineering and systems specialist | Blue |
-| Emma | Marketing and communications specialist | Coral |
+| Caveworkers Manager | Workforce coordinator and HR manager | Electric cyan |
+| Maya | Data analyst and insight specialist | Violet |
+| Arav | Product and research specialist | Amber |
+| Arav | Engineering and systems specialist | Blue |
+| Maya | Marketing and communications specialist | Coral |
 | Arav | Finance and planning specialist | Lime |
-| Olivia | Operations and workflow specialist | Mint |
+| Priya | Operations and workflow specialist | Mint |
 | Maya | Customer and people specialist | Rose |
 | Priya | Legal and compliance support specialist | Gold |
 | Iris | Executive assistant and knowledge specialist | Lavender |

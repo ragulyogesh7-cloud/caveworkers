@@ -23,15 +23,10 @@ const EMPLOYEE_VOICE_PROFILES = Object.freeze({
   iris:  { label: 'Precise British English', locale: 'en-GB', gender: 'female', hints: ['serena', 'kate', 'google uk english female'], rate: 0.88, pitch: 0.96 },
   arav:  { label: 'Clear Australian English', locale: 'en-AU', gender: 'male', hints: ['lee', 'google australian english'], rate: 0.93, pitch: 0.91 },
   priya: { label: 'Natural Indian English',  locale: 'en-IN', gender: 'female', hints: ['heera', 'samantha', 'google hindi female'], rate: 0.98, pitch: 1.02 },
-  // ── Legacy role-based stubs (kept as fallbacks) ───────────────────────────
   data_analyst: { label: 'Measured British English', locale: 'en-GB', gender: 'male', hints: ['george', 'daniel', 'google uk english male'], rate: 0.91, pitch: 0.92 },
   cybersecurity_analyst: { label: 'Precise British English', locale: 'en-GB', gender: 'female', hints: ['serena', 'kate', 'google uk english female'], rate: 0.88, pitch: 0.96 },
   backend_developer: { label: 'Clear Australian English', locale: 'en-AU', gender: 'male', hints: ['lee', 'google australian english'], rate: 0.94, pitch: 0.9 },
   qa_engineer: { label: 'Warm Indian English', locale: 'en-IN', gender: 'female', hints: ['heera', 'samantha', 'google us english female'], rate: 0.98, pitch: 1.04 },
-  sarah: { label: 'Warm Indian English', locale: 'en-IN', gender: 'female', hints: ['heera', 'samantha', 'google us english female'], rate: 0.98, pitch: 1.04 },
-  david: { label: 'Measured British English', locale: 'en-GB', gender: 'male', hints: ['george', 'daniel', 'google uk english male'], rate: 0.91, pitch: 0.92 },
-  alex:  { label: 'Calm American English', locale: 'en-US', gender: 'male', hints: ['guy', 'mark', 'google us english'], rate: 0.96, pitch: 0.97 },
-  mike:  { label: 'Clear Australian English', locale: 'en-AU', gender: 'male', hints: ['lee', 'google australian english'], rate: 0.94, pitch: 0.9 },
 });
 
 function getSoundContext() {
@@ -368,7 +363,7 @@ function avatarMarkup(employee = {}, label = 'AI', extraClass = '') {
   const color = employee.color || '#82e9ff';
   const employeeId = String(employee.id || employee.employee_id || '').toLowerCase();
   const initials = String(label || employee.name || 'AI').split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'AI';
-  const knownAvatars = ['data_analyst', 'cybersecurity_analyst', 'backend_developer', 'qa_engineer', 'alex', 'arav', 'david', 'emma', 'iris', 'maya', 'mike', 'olivia', 'priya', 'sarah'];
+  const knownAvatars = ['data_analyst', 'cybersecurity_analyst', 'backend_developer', 'qa_engineer', 'arav', 'iris', 'maya', 'priya'];
   const hasPortrait = Boolean(employee.avatar_url || knownAvatars.includes(employeeId));
   const portraitUrl = employee.avatar_url || (knownAvatars.includes(employeeId) ? `/static/assets/employee-avatars/${encodeURIComponent(employeeId)}.webp` : '');
   const image = hasPortrait ? `<img class="employee-portrait" src="${safe(portraitUrl)}" alt="${safe(employee.name || initials)}" loading="lazy" onerror="this.style.display='none';if(this.nextElementSibling)this.nextElementSibling.style.display='flex';">` : '';

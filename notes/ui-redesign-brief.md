@@ -8,7 +8,7 @@ The visual language remains Caveworkers’ liquid-glass system: deep ink canvas,
 
 ## Command center information architecture
 
-The desktop layout uses a compact left rail for only four destinations: Company room, David’s data lab, Settings, and Sign out. The main area has a sticky room header, a single large message timeline, and a composer dock. A narrow context rail sits beside the timeline on wide screens and collapses below the room on mobile.
+The desktop layout uses a compact left rail for only four destinations: Company room, Maya’s data lab, Settings, and Sign out. The main area has a sticky room header, a single large message timeline, and a composer dock. A narrow context rail sits beside the timeline on wide screens and collapses below the room on mobile.
 
 The room header contains the workspace identity, realtime connection state, active employee avatars, and a clear “Assign work” affordance. The timeline merges manager messages, task routing, employee collaboration events, task updates, approval requests, and completion summaries. Existing `/api/workforce/workroom` snapshot data and `/api/workforce/stream` SSE events remain the source of truth; no tenant data is moved client-side between workspaces.
 

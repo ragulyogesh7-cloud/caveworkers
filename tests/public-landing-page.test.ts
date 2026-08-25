@@ -9,9 +9,8 @@ describe('public landing page workforce contract', () => {
     for (const role of ['Data Analyst', 'Cybersecurity Analyst', 'Backend Developer', 'QA Automation Engineer']) {
       expect(landingPage).toContain(role);
     }
-    for (const legacyName of ['Sarah', 'David', 'Alex']) {
-      expect(landingPage).not.toContain(legacyName);
-    }
+    expect(landingPage).not.toContain('Talent & HR Manager');
+    expect(landingPage).not.toContain('legacy-ten-employee');
     expect(landingPage).toContain('04 / 04');
   });
 

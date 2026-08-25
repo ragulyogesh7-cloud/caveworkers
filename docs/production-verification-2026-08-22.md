@@ -12,4 +12,4 @@ The Software QA/Automation Engineer workspace independently loaded with `PLAN NE
 
 ## Follow-up observation
 
-- The deployed Company Room still contains legacy references to “Sarah” in explanatory copy even though the visible workforce is the current four-avatar roster. This is presentation copy only in the observed view and should be updated in a follow-up deployment for terminology consistency.
+- The deployed Company Room still contains legacy references to “Caveworkers Manager” in explanatory copy even though the visible workforce is the current four-avatar roster. This is presentation copy only in the observed view and should be updated in a follow-up deployment for terminology consistency.

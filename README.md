@@ -8,20 +8,20 @@ Caveworkers is a multi-tenant SaaS control plane for a monitored AI workforce. I
 
 | Layer | Current implementation |
 |---|---|
-| Runtime | Node.js 22, TypeScript, native ESM |
+| Runtime | Node.js 24.13+, TypeScript, native ESM, Google ADK TypeScript SDK |
 | HTTP application | Express with EJS templates and vanilla browser JavaScript/CSS |
 | Identity | Firebase Google sign-in, Firebase Admin ID-token verification, revocation-checked session cookies |
 | Durable system of record | Firestore for verified users, companies, tenant connectors, employee memory, tasks, approvals, activity logs, and workforce jobs when Firebase is configured |
 | Tenant boundary | The verified Firebase user resolves the company ID; tenant collections and API reads/writes are scoped to that company |
 | Payments | Razorpay order creation, server-side signature verification, webhook HMAC verification, and trial/plan enforcement |
 | Connectors | Tenant-scoped Gmail, Google Sheets, and HTTPS custom MCP connections with encrypted bearer tokens and per-tool grants |
-| Workforce | Exactly four employee workspaces—Data Analyst, Cybersecurity Analyst, Full Stack Backend Developer, and Software QA/Automation Engineer—with a bounded Firestore-backed worker, task traces, presence, and SSE updates |
+| Workforce | A Google ADK manager agent orchestrates exactly four employee agents—Data Analyst, Cybersecurity Analyst, Full Stack Backend Developer, and Software QA/Automation Engineer—over the existing bounded worker, task traces, presence, approvals, and SSE updates |
 
 The main application entry point is [`server.ts`](server.ts). It currently contains the route layer, middleware, Firebase adapters, employee catalog, connector logic, workroom worker, and payment handlers. The production notes in [`DEPLOYMENT.md`](DEPLOYMENT.md) describe the current single-process worker boundary and the requirements for horizontal scaling.
 
 ## Local setup
 
-Caveworkers requires **Node.js 22 or newer** and npm. Confirm the runtime before installing dependencies:
+Caveworkers requires **Node.js 24.13.0 or newer** and npm. Confirm the runtime before installing dependencies:
 
 ```bash
 node --version
@@ -154,6 +154,7 @@ The checked-in [`.env.example`](.env.example) contains only variables read by th
 | Firebase | `FIREBASE_*`, `FIREBASE_SERVICE_ACCOUNT_PATH`, `GOOGLE_APPLICATION_CREDENTIALS` |
 | Payments | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` |
 | Analyst | `OPENROUTER_API_KEY`, `OPENROUTER_BASE_URL`, `ANALYST_MODEL`, `OPENROUTER_TIMEOUT_MS`, `ANALYST_MAX_TOKENS`, optional `GEMINI_API_KEY`, `PUBLIC_APP_URL` |
+| ADK workforce | `ADK_MODEL`, plus `GEMINI_API_KEY` or Vertex AI credentials recognized by Google ADK |
 | Google connectors | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI` |
 | Connector encryption | `MCP_TOKEN_ENCRYPTION_KEY` |
 | Worker/research | `ALWAYS_ON_WORKER_ENABLED`, `WORKER_POLL_MS`, `WORKER_INSTANCE_ID`, `WEB_RESEARCH_ENABLED`, optional `TAVILY_API_KEY`, `BRAVE_SEARCH_API_KEY` |
